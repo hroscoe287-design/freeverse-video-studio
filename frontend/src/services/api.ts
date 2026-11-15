@@ -143,6 +143,7 @@ export interface GeneratorCapabilities {
   comfyui_reachable: boolean;
   anime_generation_ready: boolean;
   generation_provider?: string;
+  generation_provider_status?: { provider: string; online: boolean; anime_model?: string | null; available_image_models: number; phone_compute_required: boolean; mode: string };
   video_mode?: string;
   workflow_configured?: boolean;
   workflow_file_exists?: boolean;
