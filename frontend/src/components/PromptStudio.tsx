@@ -230,7 +230,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           <div style={{ padding: '14px', marginBottom: '18px', borderRadius: '10px', border: '1px solid var(--primary)', background: 'var(--bg-secondary)' }}>
             <div style={{ fontWeight: 800, marginBottom: '6px' }}>BLOODLINE STORYBOARD READY</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              {storyboardProject.scenes.length} scenes prepared. Configure a reachable ComfyUI server and API-format workflow. Video workflow outputs are attached to scenes and assembled into an MP4; image-only workflows produce animated camera moves, not character animation.
+              {storyboardProject.scenes.length} scenes prepared. Roscoe will request real AI-generated anime images from free volunteer workers, then use FreeVerse's renderer to create a playable MP4 with cinematic camera motion. Full character animation requires a separate video-model runtime.
             </div>
             {animeLoading && (
               <div style={{ marginBottom: '10px' }}>
@@ -263,12 +263,12 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
             </div>
             <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-              <strong>ROSCOE AI ANIME ENGINE:</strong> {engine ? (engine.anime_generation_ready ? 'Workflow files found — live model test pending' : (engine.comfyui_reachable ? 'GPU server connected — model workflows need setup' : 'GPU server not connected')) : 'Checking connection…'}
+              <strong>ROSCOE AI ANIME ENGINE:</strong> {engine ? (engine.generation_provider || (engine.comfyui_reachable ? 'GPU generation server connected' : 'Checking free generation provider')) : 'Checking connection…'}
               <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{engine?.detail || 'Checking the backend generation service.'}</div>
               <div style={{ marginTop: '8px', display: 'grid', gap: '5px' }}>
                 <div><strong>Anime artwork:</strong> {engine?.engine?.models?.image?.name || 'Neta Lumina v1.0'} · <a href="https://huggingface.co/neta-art/Neta-Lumina" target="_blank" rel="noreferrer">model</a></div>
                 <div><strong>Character animation:</strong> {engine?.engine?.models?.video?.name || 'Wan 2.2 TI2V-5B'} · <a href="https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B" target="_blank" rel="noreferrer">model</a></div>
-                <div style={{ color: 'var(--text-muted)' }}>Two-stage pipeline: create a consistent anime keyframe, then animate it into a video clip. Model weights and a successful GPU test are still required.</div>
+                <div style={{ color: 'var(--text-muted)' }}>Free provider: AI Horde volunteer workers generate the anime keyframe (anonymous requests may wait in a shared queue). FreeVerse then renders the keyframes into an MP4. Optional ComfyUI + Wan 2.2 can provide full AI character animation when a compatible GPU host is connected.</div>
               </div>
             </div>
             <textarea
