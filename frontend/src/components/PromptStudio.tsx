@@ -68,7 +68,10 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
   const [childSafe, setChildSafe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);\n  const [engine, setEngine] = useState<GeneratorCapabilities | null>(null);\n\n  useEffect(() => { fetchGeneratorCapabilities().then(setEngine).catch(() => setEngine(null)); }, []);
+  const [error, setError] = useState<string | null>(null);
+  const [engine, setEngine] = useState<GeneratorCapabilities | null>(null);
+
+  useEffect(() => { fetchGeneratorCapabilities().then(setEngine).catch(() => setEngine(null)); }, []);
 
   const handleGenerate = async () => {
     if (activeTab === 'prompt' && !prompt.trim()) {
