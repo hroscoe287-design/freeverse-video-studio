@@ -164,6 +164,11 @@ def _run_anime_job(job_id: str, project_id: str):
                     prompt, negative, progress=report_provider_progress
                 )
             scene.asset_id = asset_id
+            # Attach the generated file URL as well as its ID so the editor preview,
+            # media picker, and FFmpeg renderer can resolve the real image.
+            asset_meta = get_asset_meta(asset_id)
+            if asset_meta:
+                scene.asset_url = asset_meta.url
             scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
             save_project(project)
             with ANIME_JOBS_LOCK:
