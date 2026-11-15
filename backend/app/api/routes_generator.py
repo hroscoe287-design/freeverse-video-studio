@@ -12,6 +12,7 @@ from ..models.project import Project
 from ..core.procedural_gen import generate_storyboard_from_prompt
 from ..core.storage import save_project, load_project, get_asset_meta
 from ..core.comfyui_pipeline import generate_scene_media
+from ..core.ai_horde_engine import generate_anime_image
 from ..core.roscoe_anime_engine import (MODEL_PROFILES, NEGATIVE_PROMPT, build_scene_prompt, build_motion_prompt, engine_status, workflow_path)
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
@@ -109,9 +110,11 @@ def generator_capabilities():
         "comfyui_reachable": engine["comfyui_reachable"],
         "workflow_configured": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
         "workflow_file_exists": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
-        "anime_generation_ready": ready,
+        "anime_generation_ready": True,
+        "generation_provider": "AI Horde free volunteer workers (anonymous queue)",
+        "video_mode": "Wan 2.2 image-to-video when ComfyUI is configured; otherwise generated anime keyframes are animated by the existing FFmpeg renderer",
         "engine": engine,
-        "detail": detail
+        "detail": (detail if engine["ready"] else "Free anime image generation is enabled through AI Horde volunteer workers. Anonymous requests may wait in a shared queue; generated stills become MP4 scenes through FreeVerse's existing renderer.")
     }
 
 ANIME_JOBS: Dict[str, Dict[str, Any]] = {}
@@ -149,7 +152,9 @@ def _run_anime_job(job_id: str, project_id: str):
                     input_image=keyframe_path, output_preference="video"
                 )
             else:
-                media_path, asset_id = generate_scene_media(prompt, negative)
+                # Free fallback: request a real anime keyframe from AI Horde.
+                # FreeVerse's existing FFmpeg renderer animates the still with camera motion.
+                media_path, asset_id = generate_anime_image(prompt, negative)
             scene.asset_id = asset_id
             scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
             save_project(project)
@@ -177,11 +182,8 @@ def start_anime_generation(project_id: str):
         and video_workflow and Path(video_workflow).expanduser().is_file()
     )
     legacy_ready = legacy_workflow and Path(legacy_workflow).expanduser().is_file()
-    if not two_stage_ready and not legacy_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Roscoe Anime Engine needs two API workflows: set ROSCOE_IMAGE_WORKFLOW_JSON for Neta Lumina keyframes and ROSCOE_VIDEO_WORKFLOW_JSON for Wan 2.2 image-to-video. Each workflow must use __PROMPT__ and __NEGATIVE_PROMPT__; the video workflow must also load __IMAGE__."
-        )
+    # If no private ComfyUI GPU host is configured, use the free AI Horde
+    # volunteer-worker image provider and the existing FFmpeg scene animator.
     project = load_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
