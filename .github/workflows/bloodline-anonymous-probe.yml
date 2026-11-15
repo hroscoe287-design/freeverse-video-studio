@@ -1,0 +1,106 @@
+name: AI Horde anonymous free-tier probe
+
+on:
+  push:
+    branches:
+      - automation/bloodline-e2e-20261115
+    paths:
+      - .github/workflows/bloodline-anonymous-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install image verification dependency
+        run: python -m pip install --upgrade requests pillow
+
+      - name: Probe AI Horde with the public anonymous key
+        run: |
+          mkdir -p artifacts
+          python - <<'PY'
+          import json, pathlib, secrets, sys, time
+          import requests
+          from PIL import Image
+
+          base = "https://aihorde.net/api"
+          headers = {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "Client-Agent": "RoscoesAdaptiveAnimeEngine:2.1:github.com/hroscoe287-design/freeverse-video-studio",
+              "apikey": "0000000000",
+              "User-Agent": "RoscoesAdaptiveAnimeEngine/2.1 (FreeVerse Video Studio)"
+          }
+          result = {"mode": "anonymous", "width": 256, "height": 256, "steps": 4}
+          try:
+              payload = {
+                  "prompt": "high quality original 2D Japanese anime keyframe, Diamond, a young warrior, standing in a ruined city at night as an ancient symbol glows softly on his hand, moonlit sky, mysterious blue energy, nonviolent fantasy scene, detailed background, cel shading, expressive composition ### low quality, blurry, bad anatomy, watermark, text, photorealistic, violence",
+                  "params": {
+                      "n": 1, "width": 256, "height": 256, "steps": 4,
+                      "cfg_scale": 2.0, "sampler_name": "k_euler",
+                      "karras": False, "seed": str(secrets.randbelow(2**31 - 1))
+                  },
+                  "nsfw": False, "censor_nsfw": True,
+                  "r2": True, "shared": False, "slow_workers": False
+              }
+              response = requests.post(base + "/v2/generate/async", json=payload, headers=headers, timeout=60)
+              result["submit_http"] = response.status_code
+              if not response.ok:
+                  result["status"] = "FAILED"
+                  result["error"] = f"AI Horde HTTP {response.status_code}: {response.text[:1200]}"
+                  raise RuntimeError(result["error"])
+              queued = response.json()
+              job_id = queued.get("id")
+              if not job_id:
+                  raise RuntimeError(f"AI Horde did not return a job id: {queued}")
+              result["job_id"] = job_id
+              deadline = time.time() + 720
+              while time.time() < deadline:
+                  time.sleep(5)
+                  check_response = requests.get(base + f"/v2/generate/check/{job_id}", headers=headers, timeout=30)
+                  result["last_check_http"] = check_response.status_code
+                  check_response.raise_for_status()
+                  check = check_response.json()
+                  if check.get("faulted"):
+                      raise RuntimeError("AI Horde worker faulted the anonymous probe.")
+                  if check.get("done") or (isinstance(check.get("finished"), (int, float)) and check["finished"] >= 1):
+                      break
+              else:
+                  raise RuntimeError("Anonymous probe remained queued for 12 minutes.")
+              status_response = requests.get(base + f"/v2/generate/status/{job_id}", headers=headers, timeout=45)
+              result["status_http"] = status_response.status_code
+              status_response.raise_for_status()
+              generations = status_response.json().get("generations") or []
+              if not generations or not generations[0].get("img"):
+                  raise RuntimeError(f"AI Horde completed without an image: {status_response.text[:1000]}")
+              image_response = requests.get(generations[0]["img"], headers={"User-Agent": headers["User-Agent"]}, timeout=90)
+              result["image_http"] = image_response.status_code
+              image_response.raise_for_status()
+              path = pathlib.Path("artifacts/anonymous-probe-image")
+              path.write_bytes(image_response.content)
+              with Image.open(path) as image:
+                  image.verify()
+              result["image_bytes"] = len(image_response.content)
+              result["image_content_type"] = image_response.headers.get("content-type")
+              result["status"] = "SUCCESS"
+              print("ANONYMOUS PROBE SUCCESS: AI Horde returned a real image.")
+          except Exception as exc:
+              result.setdefault("status", "FAILED")
+              result.setdefault("error", str(exc))
+              print("ANONYMOUS PROBE FAILED:", str(exc))
+              raise
+          finally:
+              pathlib.Path("artifacts/probe-result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+          PY
+
+      - name: Upload anonymous probe result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-horde-anonymous-probe
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
