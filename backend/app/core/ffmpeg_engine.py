@@ -151,7 +151,7 @@ def build_scene_video_clip(
         is_video_input = False
     else:
         ext = input_file.suffix.lower()
-        is_video_input = ext in [".mp4", ".webm", ".mov"]
+        is_video_input = ext in [".mp4", ".webm", ".mov", ".gif"]
 
     # 2. Text overlay generation
     overlay_path = None
