@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from app.core.comfyui_pipeline import _replace_tokens
 from app.core.roscoe_anime_engine import (
     ENGINE_NAME,
     MODEL_PROFILES,
@@ -57,3 +58,13 @@ def test_bundled_api_workflows_have_required_prompt_tokens():
     assert "__IMAGE__" in video_text
     assert any(node.get("class_type") == "SaveImage" for node in image.values())
     assert any(node.get("class_type") == "SaveVideo" for node in video.values())
+
+
+def test_workflow_seed_token_stays_numeric():
+    result = _replace_tokens(
+        {"1": {"inputs": {"seed": "__SEED__", "text": "__PROMPT__"}}},
+        "anime hero", "bad anatomy", 12345, "keyframe.png"
+    )
+    assert result["1"]["inputs"]["seed"] == 12345
+    assert isinstance(result["1"]["inputs"]["seed"], int)
+    assert result["1"]["inputs"]["text"] == "anime hero"
