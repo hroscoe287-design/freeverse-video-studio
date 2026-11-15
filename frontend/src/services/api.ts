@@ -150,3 +150,27 @@ export async function fetchGeneratorCapabilities(): Promise<GeneratorCapabilitie
   if (!r.ok) throw new Error('Could not check the anime generation engine.');
   return r.json();
 }
+
+export interface AnimeGenerationStatus {
+  job_id: string;
+  project_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  progress: number;
+  message: string;
+  error?: string | null;
+}
+
+export async function startAnimeGeneration(projectId: string): Promise<AnimeGenerationStatus> {
+  const r = await fetch(`${API_BASE}/generator/anime/start/${encodeURIComponent(projectId)}`, { method: 'POST' });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: 'Could not start anime generation.' }));
+    throw new Error(err.detail || 'Could not start anime generation.');
+  }
+  return r.json();
+}
+
+export async function getAnimeGenerationStatus(jobId: string): Promise<AnimeGenerationStatus> {
+  const r = await fetch(`${API_BASE}/generator/anime/status/${encodeURIComponent(jobId)}`);
+  if (!r.ok) throw new Error('Could not read anime generation progress.');
+  return r.json();
+}
