@@ -105,7 +105,8 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
       }
       if (style === 'ai_generated' && activeTab === 'prompt') {
         setStoryboardProject(project);
-        setAnimeMessage('Storyboard created. Generate the actual scene media next.');
+        setAnimeMessage('Storyboard created. Starting real image generation automatically…');
+        void handleGenerateAnime(project);
       } else {
         onProjectCreated(project);
         onClose();
@@ -117,13 +118,13 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
     }
   };
 
-  const handleGenerateAnime = async () => {
-    if (!storyboardProject) return;
+  const handleGenerateAnime = async (projectToGenerate: Project | null = storyboardProject) => {
+    if (!projectToGenerate) return;
     setAnimeLoading(true);
     setError(null);
     setAnimeProgress(0);
     try {
-      const started = await startAnimeGeneration(storyboardProject.id);
+      const started = await startAnimeGeneration(projectToGenerate.id);
       setAnimeMessage(started.message || 'Anime generation queued.');
       for (let attempt = 0; attempt < 1800; attempt += 1) {
         await new Promise(resolve => window.setTimeout(resolve, 2000));
@@ -132,7 +133,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
         setAnimeMessage(status.message || 'Generating scenes…');
         if (status.status === 'failed') throw new Error(status.error || status.message || 'Anime generation failed.');
         if (status.status === 'completed') {
-          const completedProject = await getProject(storyboardProject.id);
+          const completedProject = await getProject(projectToGenerate.id);
           onProjectCreated(completedProject);
           onClose();
           return;
@@ -230,7 +231,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           <div style={{ padding: '14px', marginBottom: '18px', borderRadius: '10px', border: '1px solid var(--primary)', background: 'var(--bg-secondary)' }}>
             <div style={{ fontWeight: 800, marginBottom: '6px' }}>BLOODLINE STORYBOARD READY</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              {storyboardProject.scenes.length} scenes prepared. Roscoe will request real AI-generated anime images from free volunteer workers, then use FreeVerse's renderer to create a playable MP4 with cinematic camera motion. Full character animation requires a separate video-model runtime.
+              {storyboardProject.scenes.length} scenes prepared. Real AI images are generated automatically now, then attached to the scenes for MP4 rendering.
             </div>
             {animeLoading && (
               <div style={{ marginBottom: '10px' }}>
@@ -244,7 +245,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               <button className="btn btn-primary" onClick={handleGenerateAnime} disabled={animeLoading}>
-                {animeLoading ? <><Loader2 size={15} className="spin" /> Generating Anime…</> : <><Sparkles size={15} /> Generate Anime Scenes</>}
+                {animeLoading ? <><Loader2 size={15} className="spin" /> Generating Images…</> : <><Sparkles size={15} /> Retry Image Generation</>}
               </button>
               <button className="btn btn-outline" onClick={() => { onProjectCreated(storyboardProject); onClose(); }} disabled={animeLoading}>
                 Open Storyboard Editor
@@ -259,8 +260,8 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               Describe Your Desired Video
             </label>
             <div style={{ padding: '12px', marginBottom: '12px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.5)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
-              <strong>Storyboard mode — not video generation.</strong><br />
-              This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
+              <strong>Storyboard + image generation.</strong><br />
+              Creating the scene plan automatically starts real AI anime image generation through free community workers. Images are attached to the scenes before the MP4 is rendered.
             </div>
             <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
               <strong>ROSCOE AI ANIME ENGINE:</strong> {engine ? (engine.generation_provider || (engine.comfyui_reachable ? 'GPU generation server connected' : 'Checking free generation provider')) : 'Checking connection…'}
