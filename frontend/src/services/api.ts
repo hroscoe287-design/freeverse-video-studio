@@ -66,24 +66,43 @@ export async function deleteAsset(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete asset');
 }
 
-export async function generateStoryboard(params: {
-  prompt: string;
-  style: VideoStyle;
-  target_duration: number;
-  scene_count: number;
-  include_voiceover: boolean;
-  source_document?: string;
-}): Promise<Project> {
-  const r = await fetch(`${API_BASE}/generator/storyboard`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+function buildOfflineStoryboard(params: { prompt: string; style: VideoStyle; target_duration: number; scene_count: number; include_voiceover: boolean }): Project {
+  const prompt = params.prompt.trim();
+  const count = Math.max(1, Math.min(20, params.scene_count || 6));
+  const duration = Math.max(2, params.target_duration / count);
+  const bloodline = /bloodline|diamond|eternity infinity|murder co/i.test(prompt);
+  const beats = ['Opening image and atmosphere', 'Introduce the hero', 'A mystery begins to unfold', 'The threat reveals itself', 'A decisive confrontation', 'A powerful final image'];
+  const sentences = prompt.split(/(?<=[.!?])\\s+/).filter(Boolean);
+  const scenes = Array.from({ length: count }, (_, index) => {
+    const beat = beats[index % beats.length];
+    const detail = sentences[index % Math.max(1, sentences.length)] || prompt;
+    const continuity = bloodline ? ' Keep BLOODLINE character designs consistent: Diamond is the central hero, Eternity Infinity is his sister, and Murder Co. is the opposing force.' : '';
+    return {
+      id: 'offline_scene_' + Date.now() + '_' + index,
+      title: 'Scene ' + String(index + 1).padStart(2, '0') + ' — ' + beat,
+      duration, text_overlay: index === 0 ? 'A ROSCOE ORIGINAL' : '',
+      text_position: 'bottom' as const, text_color: '#FFFFFF', font_size: 30,
+      transition: 'fade' as const, transition_duration: 0.45,
+      motion_effect: index % 2 === 0 ? 'ken_burns_zoom_in' as const : 'pan_right' as const,
+      voiceover_text: params.include_voiceover ? detail + ' Visual direction: ' + beat + '. Anime cinematic composition, expressive acting, dramatic lighting.' + continuity : undefined,
+      background_color: index % 2 === 0 ? '#111827' : '#1B1530', order: index
+    };
   });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({ detail: 'Storyboard service unavailable' }));
-    throw new Error(err.detail || 'Storyboard generation failed. Check that the backend is running.');
+  const now = new Date().toISOString();
+  const project: Project = { id: 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), title: bloodline ? 'BLOODLINE — The Legacy' : 'Untitled Anime Project', description: prompt, style: params.style, aspect_ratio: '16:9', resolution: '720p', fps: 24, scenes, audio_tracks: [], created_at: now, updated_at: now };
+  saveLocalProject(project);
+  return project;
+}
+export async function generateStoryboard(params: {
+  prompt: string; style: VideoStyle; target_duration: number; scene_count: number; include_voiceover: boolean; source_document?: string;
+}): Promise<Project> {
+  try {
+    const r = await fetch(`${API_BASE}/generator/storyboard`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+    if (!r.ok) throw new Error('Offline mode');
+    return await r.json();
+  } catch {
+    return buildOfflineStoryboard(params);
   }
-  return r.json();
 }
 
 export async function generateFromDocument(file: File, style: VideoStyle, duration: number): Promise<Project> {
