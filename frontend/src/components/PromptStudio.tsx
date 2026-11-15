@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Sparkles, 
   FileText, 
@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { VideoStyle, Project } from '../types/studio';
-import { generateStoryboard, generateFromDocument } from '../services/api';
+import { generateStoryboard, generateFromDocument, fetchGeneratorCapabilities, GeneratorCapabilities } from '../services/api';
 
 interface PromptStudioProps {
   initialStyle?: VideoStyle;
@@ -68,7 +68,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
   const [childSafe, setChildSafe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);\n  const [engine, setEngine] = useState<GeneratorCapabilities | null>(null);\n\n  useEffect(() => { fetchGeneratorCapabilities().then(setEngine).catch(() => setEngine(null)); }, []);
 
   const handleGenerate = async () => {
     if (activeTab === 'prompt' && !prompt.trim()) {
@@ -195,6 +195,10 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
             <div style={{ padding: '12px', marginBottom: '12px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.5)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
               <strong>Storyboard mode — not video generation.</strong><br />
               This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
+            </div>
+            <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
+              <strong>Anime engine:</strong> {engine ? (engine.comfyui_reachable ? 'ComfyUI connected — workflow setup still required' : 'Not connected') : 'Checking connection…'}
+              <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{engine?.detail || 'Checking the backend generation service.'}</div>
             </div>
             <textarea
               className="input-field"
