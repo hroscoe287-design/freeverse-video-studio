@@ -90,6 +90,7 @@ def roscoe_anime_engine_status():
 def generator_capabilities():
     """Expose truthful readiness for the two-stage Roscoe Anime Engine."""
     engine = roscoe_anime_engine_status()
+    provider = provider_status()
     legacy_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
     legacy_exists = bool(legacy_path and Path(legacy_path).expanduser().is_file())
     ready = bool(engine["ready"] or legacy_exists)
@@ -110,9 +111,9 @@ def generator_capabilities():
         "comfyui_reachable": engine["comfyui_reachable"],
         "workflow_configured": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
         "workflow_file_exists": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
-        "anime_generation_ready": bool(provider_status()["online"] or engine["ready"]),
-        "generation_provider": provider_status()["provider"],
-        "generation_provider_status": provider_status(),
+        "anime_generation_ready": bool(provider["online"] or engine["ready"]),
+        "generation_provider": provider["provider"],
+        "generation_provider_status": provider,
         "video_mode": "Wan 2.2 image-to-video when ComfyUI is configured; otherwise generated anime keyframes are animated by the existing FFmpeg renderer",
         "engine": engine,
         "detail": (detail if engine["ready"] else "Free anime image generation is enabled through AI Horde volunteer workers. Anonymous requests may wait in a shared queue; generated stills become MP4 scenes through FreeVerse's existing renderer.")
