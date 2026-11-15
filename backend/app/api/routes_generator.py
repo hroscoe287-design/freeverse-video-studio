@@ -142,7 +142,7 @@ def _run_anime_job(job_id: str, project_id: str):
             negative = NEGATIVE_PROMPT
             image_workflow = workflow_path("image")
             video_workflow = workflow_path("video")
-            if image_workflow and video_workflow:
+            if os.environ.get("COMFYUI_BASE_URL") and image_workflow and video_workflow:
                 keyframe_path, _ = generate_scene_media(
                     prompt, negative, workflow_path=image_workflow, output_preference="image"
                 )
