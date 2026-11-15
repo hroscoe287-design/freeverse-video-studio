@@ -74,7 +74,16 @@ export async function generateStoryboard(params: {
   include_voiceover: boolean;
   source_document?: string;
 }): Promise<Project> {
-  try { const r=await fetch(`${API_BASE}/generator/storyboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)}); if(!r.ok) throw Error(); return await r.json(); } catch { const lines=params.prompt.split(/(?<=[.!?])\s+|\n+/).map(x=>x.trim()).filter(Boolean); const fallback=['Establish the world and its danger.','The hero discovers a clue about their legacy.','A powerful enemy reveals the threat.','The hero makes a choice that changes everything.','A dramatic confrontation erupts.','End on a suspenseful cliffhanger.']; const p=makeLocalProject({title:params.prompt.slice(0,48)||'New Story',style:params.style,aspect_ratio:params.style==='social'?'9:16':'16:9',resolution:'1080p',fps:30}); p.description=params.prompt; p.scenes=Array.from({length:params.scene_count},(_,i)=>({id:`scene_${i+1}`,title:`Scene ${i+1}`,duration:params.target_duration/params.scene_count,text_overlay:lines[i]||fallback[i%6],voiceover_text:params.include_voiceover?(lines[i]||fallback[i%6]):'',text_position:'bottom' as const,text_color:'#FFFFFF',font_size:32,transition:'fade' as const,transition_duration:0.5,motion_effect:'ken_burns_zoom_in' as const,background_color:'#151525',order:i})); saveLocalProject(p); return p; }
+  const r = await fetch(`${API_BASE}/generator/storyboard`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: 'Storyboard service unavailable' }));
+    throw new Error(err.detail || 'Storyboard generation failed. Check that the backend is running.');
+  }
+  return r.json();
 }
 
 export async function generateFromDocument(file: File, style: VideoStyle, duration: number): Promise<Project> {
@@ -82,8 +91,12 @@ export async function generateFromDocument(file: File, style: VideoStyle, durati
   formData.append('file', file);
   formData.append('style', style);
   formData.append('target_duration', duration.toString());
-  
-  try { const r=await fetch(`${API_BASE}/generator/document-storyboard`,{method:'POST',body:formData}); if(!r.ok) throw Error(); return await r.json(); } catch { const content=await file.text(); return generateStoryboard({prompt:content,style,target_duration:duration,scene_count:Math.max(2,Math.min(6,Math.ceil(duration/8))),include_voiceover:true}); }
+  const r = await fetch(`${API_BASE}/generator/document-storyboard`, { method: 'POST', body: formData });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: 'Document storyboard service unavailable' }));
+    throw new Error(err.detail || 'Document processing failed.');
+  }
+  return r.json();
 }
 
 export async function startRender(projectId: string, quality: 'draft' | 'standard' | 'high' = 'standard'): Promise<RenderStatus> {
