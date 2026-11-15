@@ -71,7 +71,11 @@ def generator_capabilities():
     reachable = False
     detail = "No ComfyUI server configured. Storyboards and FFmpeg editing are available; AI scene generation is not."
     try:
-        req = urllib.request.Request(f"{endpoint}/system_stats", headers={"User-Agent": "FreeVerseStudio"})
+        headers = {"User-Agent": "FreeVerseStudio"}
+        api_key = os.environ.get("COMFYUI_API_KEY")
+        if api_key:
+            headers["Authorization"] = "Bearer " + api_key
+        req = urllib.request.Request(f"{endpoint}/system_stats", headers=headers)
         with urllib.request.urlopen(req, timeout=2.5) as response:
             reachable = response.status == 200
     except Exception:
