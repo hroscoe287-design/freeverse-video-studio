@@ -1,6 +1,9 @@
 import { Project, AssetMeta, RenderStatus, AIModelInfo, HardwareInfo, VideoStyle, AspectRatio, Resolution } from '../types/studio';
 
-const API_BASE = '/api';
+// Set VITE_API_BASE_URL to the backend origin for hosted/Android builds.
+// Leave it unset for the local Vite proxy (http://127.0.0.1:8000).
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\\/+$/, '');
+const API_BASE = `${API_ORIGIN}/api`;
 
 const LOCAL_PROJECTS_KEY = 'roscoes-freeverse-projects-v1';
 const readLocalProjects = (): Project[] => { try { return JSON.parse(localStorage.getItem(LOCAL_PROJECTS_KEY) || '[]') as Project[]; } catch { return []; } };
