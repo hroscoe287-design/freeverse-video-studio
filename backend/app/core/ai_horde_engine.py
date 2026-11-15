@@ -52,8 +52,8 @@ def _request(path: str, payload: Optional[Dict[str, Any]] = None, timeout: int =
 def _live_models() -> List[Dict[str, Any]]:
     """Return the currently served image models; empty means status is unavailable."""
     try:
-        result = _request("/v2/status/models?type=image", timeout=12)
-        return result if isinstance(result, list) else []
+        result = _request("/v2/status/models", timeout=12)
+        return [m for m in result if isinstance(m, dict) and m.get("type", "image") == "image"] if isinstance(result, list) else []
     except Exception:
         return []
 
