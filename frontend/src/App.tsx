@@ -35,6 +35,7 @@ import { AssetManager } from './components/AssetManager';
 import { AudioVoiceStudio } from './components/AudioVoiceStudio';
 import { ModelHubModal } from './components/ModelHubModal';
 import { RenderExportModal } from './components/RenderExportModal';
+import { AnimeGenerationPanel } from './components/AnimeGenerationPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
@@ -457,6 +458,15 @@ export const App: React.FC = () => {
                 {currentProject.style.replace('_', ' ')}
               </span>
             </div>
+
+            <AnimeGenerationPanel
+              project={currentProject}
+              onProjectUpdated={(updated) => {
+                setCurrentProject(updated);
+                setProjects((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+                showToast('Real anime artwork generated and attached to the scenes.', 'success');
+              }}
+            />
 
             {/* Storyboard Card Strip & Scene Inspector */}
             <StoryboardEditor
