@@ -12,6 +12,7 @@ from ..models.project import Project
 from ..core.procedural_gen import generate_storyboard_from_prompt
 from ..core.storage import save_project, load_project, get_asset_meta
 from ..core.comfyui_pipeline import generate_scene_media
+from ..core.roscoe_anime_engine import (MODEL_PROFILES, NEGATIVE_PROMPT, build_scene_prompt, build_motion_prompt, engine_status)
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
 
@@ -61,17 +62,13 @@ async def generate_from_document(
     return saved
 
 
-@router.get("/capabilities")
-def generator_capabilities():
-    """Report actual storyboard, render, and ComfyUI workflow availability."""
+@router.get("/engine")
+def roscoe_anime_engine_status():
+    """Describe the selected open-weight models and the configured generation runtime."""
     endpoint = os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
-    configured = bool(os.environ.get("COMFYUI_BASE_URL"))
-    workflow_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
-    workflow_exists = bool(workflow_path and Path(workflow_path).expanduser().is_file())
     reachable = False
-    detail = "No ComfyUI server configured. Storyboards and FFmpeg editing are available; AI scene generation is not."
     try:
-        headers = {"User-Agent": "FreeVerseStudio"}
+        headers = {"User-Agent": "RoscoeAnimeEngine"}
         api_key = os.environ.get("COMFYUI_API_KEY")
         if api_key:
             headers["Authorization"] = "Bearer " + api_key
@@ -79,21 +76,41 @@ def generator_capabilities():
         with urllib.request.urlopen(req, timeout=2.5) as response:
             reachable = response.status == 200
     except Exception:
-        if configured:
-            detail = "COMFYUI_BASE_URL is set, but the generation server could not be reached from this backend."
-    ready = reachable and workflow_exists
-    if reachable and not workflow_exists:
-        detail = "ComfyUI is connected. Set COMFYUI_WORKFLOW_JSON to an API-format workflow file to enable scene generation."
-    elif ready:
-        detail = "ComfyUI and a workflow file are configured. Generation will work if the workflow's models and nodes are installed."
+        pass
+    image_path = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON", "")
+    video_path = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON", "")
+    return engine_status(
+        reachable,
+        bool(image_path and Path(image_path).expanduser().is_file()),
+        bool(video_path and Path(video_path).expanduser().is_file())
+    )
+
+@router.get("/capabilities")
+def generator_capabilities():
+    """Expose truthful readiness for the two-stage Roscoe Anime Engine."""
+    engine = roscoe_anime_engine_status()
+    legacy_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
+    legacy_exists = bool(legacy_path and Path(legacy_path).expanduser().is_file())
+    ready = bool(engine["ready"] or legacy_exists)
+    if engine["ready"]:
+        detail = "Roscoe Anime Engine is ready: anime keyframes and video animation workflows are configured."
+    elif not engine["comfyui_reachable"]:
+        detail = "GPU generation server is not reachable. Storyboards and editing work; AI media generation is offline."
+    elif not engine["image_workflow_configured"]:
+        detail = "GPU server is connected. Configure ROSCOE_IMAGE_WORKFLOW_JSON for the anime image model."
+    elif not engine["video_workflow_configured"]:
+        detail = "Anime image workflow is configured. Configure ROSCOE_VIDEO_WORKFLOW_JSON for character animation."
+    else:
+        detail = "Generation engine configuration is incomplete."
     return {
         "storyboard": True,
         "ffmpeg_render": True,
-        "comfyui_configured": configured,
-        "comfyui_reachable": reachable,
-        "workflow_configured": bool(workflow_path),
-        "workflow_file_exists": workflow_exists,
+        "comfyui_configured": bool(os.environ.get("COMFYUI_BASE_URL")),
+        "comfyui_reachable": engine["comfyui_reachable"],
+        "workflow_configured": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
+        "workflow_file_exists": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
         "anime_generation_ready": ready,
+        "engine": engine,
         "detail": detail
     }
 
@@ -118,22 +135,21 @@ def _run_anime_job(job_id: str, project_id: str):
                 project.title, project.description, scene.title,
                 scene.voiceover_text or "", scene.text_overlay or ""
             ] if part)
-            prompt = (
-                "Create a polished cinematic Japanese dark fantasy anime sequence, "
-                "consistent premium 2D anime art direction, detailed expressive characters, "
-                "coherent anatomy, dramatic film lighting, dynamic composition. "
-                "Series: BLOODLINE. Character continuity: Diamond is a young male warrior "
-                "with black hair and glowing red eyes; Eternity Infinity is his mysterious "
-                "sister; Murder Co. is the ruthless antagonist. Preserve established designs. "
-                f"Scene direction: {scene_text}. "
-                "If the workflow supports video output, animate clear continuous motion, "
-                "not a slideshow or static title card."
-            )
-            negative = (
-                "low quality, blurry, malformed anatomy, extra fingers, inconsistent costume, "
-                "duplicate characters, text, watermark, logo, photorealistic, live action"
-            )
-            media_path, asset_id = generate_scene_media(prompt, negative)
+            prompt = build_scene_prompt(project.title, project.description, scene.title, scene_text)
+            negative = NEGATIVE_PROMPT
+            image_workflow = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON")
+            video_workflow = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON")
+            if image_workflow and video_workflow:
+                keyframe_path, _ = generate_scene_media(
+                    prompt, negative, workflow_path=image_workflow, output_preference="image"
+                )
+                motion_prompt = build_motion_prompt(prompt, min(float(scene.duration), 8.0))
+                media_path, asset_id = generate_scene_media(
+                    motion_prompt, negative, workflow_path=video_workflow,
+                    input_image=keyframe_path, output_preference="video"
+                )
+            else:
+                media_path, asset_id = generate_scene_media(prompt, negative)
             scene.asset_id = asset_id
             scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
             save_project(project)
@@ -153,11 +169,18 @@ def _run_anime_job(job_id: str, project_id: str):
 
 @router.post("/anime/start/{project_id}")
 def start_anime_generation(project_id: str):
-    workflow_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
-    if not workflow_path or not Path(workflow_path).expanduser().is_file():
+    image_workflow = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON", "")
+    video_workflow = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON", "")
+    legacy_workflow = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
+    two_stage_ready = (
+        image_workflow and Path(image_workflow).expanduser().is_file()
+        and video_workflow and Path(video_workflow).expanduser().is_file()
+    )
+    legacy_ready = legacy_workflow and Path(legacy_workflow).expanduser().is_file()
+    if not two_stage_ready and not legacy_ready:
         raise HTTPException(
             status_code=503,
-            detail="The anime workflow file is missing. Set COMFYUI_WORKFLOW_JSON to an existing ComfyUI API-format text-to-video or image-to-video workflow file."
+            detail="Roscoe Anime Engine needs two API workflows: set ROSCOE_IMAGE_WORKFLOW_JSON for Neta Lumina keyframes and ROSCOE_VIDEO_WORKFLOW_JSON for Wan 2.2 image-to-video. Each workflow must use __PROMPT__ and __NEGATIVE_PROMPT__; the video workflow must also load __IMAGE__."
         )
     project = load_project(project_id)
     if not project:
