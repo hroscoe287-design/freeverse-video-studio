@@ -124,7 +124,7 @@ def _run_anime_job(job_id: str, project_id: str):
     with ANIME_JOBS_LOCK:
         job = ANIME_JOBS[job_id]
         job["status"] = "running"
-        job["message"] = "Connecting to ComfyUI..."
+        job["message"] = "Connecting to free AI image generation workers..."
     try:
         project = load_project(project_id)
         if not project or not project.scenes:
