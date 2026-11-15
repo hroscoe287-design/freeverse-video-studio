@@ -31,20 +31,49 @@ def _request_json(url: str, payload: Dict[str, Any] = None, timeout: int = 30) -
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
-def _replace_tokens(value: Any, prompt: str, negative: str, seed: int) -> Any:
+def _replace_tokens(value: Any, prompt: str, negative: str, seed: int, image_filename: str = '') -> Any:
     if isinstance(value, dict):
-        return {k: _replace_tokens(v, prompt, negative, seed) for k, v in value.items()}
+        return {k: _replace_tokens(v, prompt, negative, seed, image_filename) for k, v in value.items()}
     if isinstance(value, list):
-        return [_replace_tokens(v, prompt, negative, seed) for v in value]
+        return [_replace_tokens(v, prompt, negative, seed, image_filename) for v in value]
+    if value == "__SEED__":
+        return seed
     if isinstance(value, str):
         return (value.replace("__PROMPT__", prompt)
                      .replace("__NEGATIVE_PROMPT__", negative)
-                     .replace("__SEED__", str(seed)))
+                     .replace("__SEED__", str(seed))
+                     .replace("__IMAGE__", image_filename))
     return value
 
-def generate_scene_media(prompt: str, negative_prompt: str = "") -> Tuple[Path, str]:
+
+def _upload_image_to_comfyui(base: str, image_path: Path) -> str:
+    """Upload a generated keyframe so an I2V workflow can load it by filename."""
+    boundary = "----RoscoeAnimeEngineBoundary"
+    filename = image_path.name
+    content = image_path.read_bytes()
+    mime = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+    prefix = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+        f"Content-Type: {mime}\r\n\r\n"
+    ).encode("utf-8")
+    body = prefix + content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}",
+               "User-Agent": "RoscoeAnimeEngine"}
+    api_key = os.environ.get("COMFYUI_API_KEY")
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+    req = urllib.request.Request(f"{base}/upload/image", data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=120) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    name = result.get("name")
+    if not name:
+        raise RuntimeError(f"ComfyUI did not accept the keyframe upload: {result}")
+    return str(name)
+
+def generate_scene_media(prompt: str, negative_prompt: str = "", workflow_path: str = None, input_image: Path = None, output_preference: str = "video") -> Tuple[Path, str]:
     base = os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
-    workflow_path = os.environ.get("COMFYUI_WORKFLOW_JSON")
+    workflow_path = workflow_path or os.environ.get("COMFYUI_WORKFLOW_JSON")
     if not workflow_path:
         raise RuntimeError("Anime workflow is not configured. Set COMFYUI_WORKFLOW_JSON to a ComfyUI API-format workflow file.")
     path = Path(workflow_path).expanduser()
@@ -58,7 +87,8 @@ def generate_scene_media(prompt: str, negative_prompt: str = "") -> Tuple[Path, 
         raise RuntimeError("ComfyUI workflow must be a non-empty API-format JSON object.")
 
     seed = secrets.randbelow(2**31 - 1)
-    workflow = _replace_tokens(workflow, prompt, negative_prompt, seed)
+    uploaded_image = _upload_image_to_comfyui(base, input_image) if input_image else ""
+    workflow = _replace_tokens(workflow, prompt, negative_prompt, seed, uploaded_image)
     queued = _request_json(f"{base}/prompt", {"prompt": workflow}, timeout=45)
     prompt_id = queued.get("prompt_id")
     if not prompt_id:
@@ -80,7 +110,8 @@ def generate_scene_media(prompt: str, negative_prompt: str = "") -> Tuple[Path, 
     outputs = history.get("outputs", {})
     selected = None
     media_kind = None
-    for key in ("videos", "gifs", "images"):
+    preferred_keys = ("images",) if output_preference == "image" else ("videos", "gifs", "images")
+    for key in preferred_keys:
         for node in outputs.values():
             if not isinstance(node, dict):
                 continue

@@ -145,6 +145,13 @@ export interface GeneratorCapabilities {
   workflow_configured?: boolean;
   workflow_file_exists?: boolean;
   detail: string;
+  engine?: {
+    name: string;
+    version: string;
+    ready: boolean;
+    note: string;
+    models: Record<string, { name: string; id: string; license: string; model_url: string; description: string; minimum_vram_gb?: number }>;
+  };
 }
 
 export async function fetchGeneratorCapabilities(): Promise<GeneratorCapabilities> {
