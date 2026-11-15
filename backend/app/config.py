@@ -56,14 +56,26 @@ ALLOWED_MIME_PREFIXES: Set[str] = {
     "image/", "video/", "audio/", "text/"
 }
 
-# Network bindings (strictly loopback for security)
-HOST = "127.0.0.1"
-PORT = 8000
-CORS_ORIGINS = [
+# Network bindings. Render supplies the public host/port at runtime.
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8000"))
+
+# Allow local development and Capacitor Android origins. Additional hosted
+# frontend origins can be supplied as a comma-separated CORS_ORIGINS env var.
+_DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
-    "http://127.0.0.1:8000"
+    "http://127.0.0.1:8000",
+    "https://localhost",
+    "http://localhost",
+    "capacitor://localhost",
 ]
+_EXTRA_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+CORS_ORIGINS = list(dict.fromkeys(_DEFAULT_CORS_ORIGINS + _EXTRA_CORS_ORIGINS))
