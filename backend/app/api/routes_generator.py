@@ -136,6 +136,7 @@ def _run_anime_job(job_id: str, project_id: str):
             media_path, asset_id = generate_scene_media(prompt, negative)
             scene.asset_id = asset_id
             scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
+            save_project(project)
             with ANIME_JOBS_LOCK:
                 job["progress"] = round((index + 1) / total * 100, 1)
         save_project(project)
@@ -152,10 +153,11 @@ def _run_anime_job(job_id: str, project_id: str):
 
 @router.post("/anime/start/{project_id}")
 def start_anime_generation(project_id: str):
-    if not os.environ.get("COMFYUI_WORKFLOW_JSON"):
+    workflow_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
+    if not workflow_path or not Path(workflow_path).expanduser().is_file():
         raise HTTPException(
             status_code=503,
-            detail="The anime engine is not configured yet. Connect ComfyUI and set COMFYUI_WORKFLOW_JSON to an API-format text-to-video or image-to-video workflow."
+            detail="The anime workflow file is missing. Set COMFYUI_WORKFLOW_JSON to an existing ComfyUI API-format text-to-video or image-to-video workflow file."
         )
     project = load_project(project_id)
     if not project:
