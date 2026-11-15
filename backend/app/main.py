@@ -73,6 +73,7 @@ def studio_info():
         "features": [
             "Natural Video Editing",
             "Prompt-to-Storyboard AI",
+            "Roscoe AI Anime Engine (Neta Lumina + Wan 2.2)",
             "Kids Cartoon & Animated Stories",
             "Educational & Explainer Video Ingestion",
             "Social Media 9:16 Shorts / Reels Presets",
