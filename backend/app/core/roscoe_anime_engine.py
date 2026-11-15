@@ -96,5 +96,5 @@ def engine_status(comfyui_reachable: bool, image_workflow_exists: bool,
         "video_workflow_configured": video_workflow_exists,
         "ready": comfyui_reachable and image_workflow_exists and video_workflow_exists,
         "mode": "two_stage_keyframe_then_animation",
-        "note": "Model weights and compatible ComfyUI nodes must be installed on the GPU host."
+        "note": "Workflow readiness only checks the endpoint and workflow files; model weights, custom nodes, and a successful inference still need verification on the GPU host."
     }
