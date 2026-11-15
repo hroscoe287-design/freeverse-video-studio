@@ -12,7 +12,7 @@ from ..models.project import Project
 from ..core.procedural_gen import generate_storyboard_from_prompt
 from ..core.storage import save_project, load_project, get_asset_meta
 from ..core.comfyui_pipeline import generate_scene_media
-from ..core.ai_horde_engine import generate_anime_image
+from ..core.ai_horde_engine import generate_anime_image, provider_status
 from ..core.roscoe_anime_engine import (MODEL_PROFILES, NEGATIVE_PROMPT, build_scene_prompt, build_motion_prompt, engine_status, workflow_path)
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
@@ -110,8 +110,9 @@ def generator_capabilities():
         "comfyui_reachable": engine["comfyui_reachable"],
         "workflow_configured": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
         "workflow_file_exists": bool(engine["image_workflow_configured"] and engine["video_workflow_configured"]) or legacy_exists,
-        "anime_generation_ready": True,
-        "generation_provider": "AI Horde free volunteer workers (anonymous queue)",
+        "anime_generation_ready": bool(provider_status()["online"] or engine["ready"]),
+        "generation_provider": provider_status()["provider"],
+        "generation_provider_status": provider_status(),
         "video_mode": "Wan 2.2 image-to-video when ComfyUI is configured; otherwise generated anime keyframes are animated by the existing FFmpeg renderer",
         "engine": engine,
         "detail": (detail if engine["ready"] else "Free anime image generation is enabled through AI Horde volunteer workers. Anonymous requests may wait in a shared queue; generated stills become MP4 scenes through FreeVerse's existing renderer.")
@@ -154,7 +155,13 @@ def _run_anime_job(job_id: str, project_id: str):
             else:
                 # Free fallback: request a real anime keyframe from AI Horde.
                 # FreeVerse's existing FFmpeg renderer animates the still with camera motion.
-                media_path, asset_id = generate_anime_image(prompt, negative)
+                def report_provider_progress(message: str):
+                    with ANIME_JOBS_LOCK:
+                        if job_id in ANIME_JOBS:
+                            ANIME_JOBS[job_id]["message"] = message
+                media_path, asset_id = generate_anime_image(
+                    prompt, negative, progress=report_provider_progress
+                )
             scene.asset_id = asset_id
             scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
             save_project(project)
@@ -193,7 +200,7 @@ def start_anime_generation(project_id: str):
     with ANIME_JOBS_LOCK:
         ANIME_JOBS[job_id] = {
             "job_id": job_id, "project_id": project_id, "status": "queued",
-            "progress": 0, "message": "Queued anime generation", "error": None
+            "progress": 0, "message": "Queued for Roscoe Adaptive Anime Engine", "error": None
         }
     thread = threading.Thread(target=_run_anime_job, args=(job_id, project_id), daemon=True)
     thread.start()
