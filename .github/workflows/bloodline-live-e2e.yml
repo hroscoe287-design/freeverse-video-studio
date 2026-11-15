@@ -1,0 +1,206 @@
+name: Bloodline live AI Horde end-to-end test
+
+on:
+  push:
+    branches:
+      - automation/bloodline-e2e-20261115
+    paths:
+      - .github/workflows/bloodline-live-e2e.yml
+
+permissions:
+  contents: read
+
+jobs:
+  live-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_URL: https://roscoes-anime-backend.onrender.com
+    steps:
+      - name: Install verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade requests pillow
+
+      - name: Generate one safe Bloodline scene and verify MP4
+        id: e2e
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          python - <<'PY'
+          import json, os, pathlib, subprocess, sys, time
+          import requests
+          from PIL import Image
+
+          base = os.environ["BASE_URL"].rstrip("/")
+          out = pathlib.Path("artifacts")
+          result = {"base_url": base, "scene_prompt": "Diamond, a young warrior, stands alone in a ruined city at night as an ancient symbol begins glowing on his hand; mysterious blue energy drifts across the moonlit sky; cinematic 2D Japanese anime film still; nonviolent fantasy scene."}
+
+          def call(method, path, **kwargs):
+              response = requests.request(method, base + path, timeout=45, **kwargs)
+              print(f"{method} {path} -> HTTP {response.status_code}")
+              if not response.ok:
+                  raise RuntimeError(f"{method} {path} returned HTTP {response.status_code}: {response.text[:1200]}")
+              if response.content and "json" in response.headers.get("content-type", ""):
+                  return response.json()
+              return response
+
+          try:
+              health = None
+              for attempt in range(24):
+                  try:
+                      health = call("GET", "/health")
+                      break
+                  except Exception as exc:
+                      print(f"Backend warm-up {attempt + 1}/24: {exc}")
+                      time.sleep(10)
+              if not health:
+                  raise RuntimeError("Backend did not become healthy within four minutes.")
+              result["health"] = health
+
+              capabilities = call("GET", "/api/generator/capabilities")
+              result["capabilities"] = capabilities
+              print("Generator capabilities:", json.dumps(capabilities))
+
+              project = call("POST", "/api/projects", json={
+                  "title": "BLOODLINE E2E TEST - The Awakening",
+                  "description": "One-scene nonviolent integration test for AI Horde image generation and FFmpeg rendering.",
+                  "style": "ai_generated",
+                  "aspect_ratio": "16:9",
+                  "resolution": "720p",
+                  "fps": 15
+              })
+              project_id = project["id"]
+              result["project_id"] = project_id
+
+              project = call("PUT", f"/api/projects/{project_id}", json={
+                  "title": "BLOODLINE E2E TEST - The Awakening",
+                  "description": "One-scene nonviolent integration test for AI Horde image generation and FFmpeg rendering.",
+                  "scenes": [{
+                      "title": "The Awakening - Diamond in the ruined city",
+                      "duration": 5,
+                      "voiceover_text": "Diamond stands alone beneath a moonlit sky as an ancient symbol begins to glow on his hand.",
+                      "text_overlay": None,
+                      "transition": "fade",
+                      "transition_duration": 0.5,
+                      "motion_effect": "ken_burns_zoom_in",
+                      "order": 0
+                  }]
+              })
+              if len(project.get("scenes", [])) != 1:
+                  raise RuntimeError("Test project did not save exactly one scene.")
+
+              started = call("POST", f"/api/generator/anime/start/{project_id}")
+              job_id = started["job_id"]
+              result["anime_job_id"] = job_id
+              result["anime_start"] = started
+
+              deadline = time.time() + 1020
+              status = started
+              while time.time() < deadline:
+                  time.sleep(8)
+                  status = call("GET", f"/api/generator/anime/status/{job_id}")
+                  print("Anime job:", json.dumps(status))
+                  if status.get("status") == "completed":
+                      break
+                  if status.get("status") == "failed":
+                      raise RuntimeError(status.get("error") or status.get("message") or "Anime generation failed without an error detail.")
+              else:
+                  raise RuntimeError("Anime generation did not finish within 17 minutes.")
+              result["anime_status"] = status
+
+              project = call("GET", f"/api/projects/{project_id}")
+              scene = project["scenes"][0]
+              if not scene.get("asset_id") or not scene.get("asset_url"):
+                  raise RuntimeError(f"Generation completed but the scene has no attached asset_id/asset_url: {scene}")
+              result["attached_asset_id"] = scene["asset_id"]
+              result["attached_asset_url"] = scene["asset_url"]
+
+              assets = call("GET", "/api/assets")
+              meta = next((item for item in assets if item.get("id") == scene["asset_id"]), None)
+              if not meta or meta.get("media_type") != "image" or int(meta.get("size_bytes") or 0) <= 0:
+                  raise RuntimeError(f"Scene asset metadata is missing or invalid: {meta}")
+              result["asset_metadata"] = meta
+
+              image_url = scene["asset_url"]
+              if image_url.startswith("/"):
+                  image_url = base + image_url
+              image_response = requests.get(image_url, timeout=60)
+              print(f"GET generated image -> HTTP {image_response.status_code} ({image_response.headers.get('content-type')})")
+              image_response.raise_for_status()
+              image_path = out / "bloodline-generated-image"
+              image_path.write_bytes(image_response.content)
+              with Image.open(image_path) as image:
+                  image.verify()
+              result["image_bytes"] = len(image_response.content)
+              result["image_content_type"] = image_response.headers.get("content-type")
+              result["image_verified"] = True
+
+              render = call("POST", "/api/render/start", json={
+                  "project_id": project_id,
+                  "quality": "draft",
+                  "burn_subtitles": False,
+                  "hardware_accel": "cpu"
+              })
+              render_id = render["job_id"]
+              result["render_job_id"] = render_id
+              deadline = time.time() + 360
+              render_status = render
+              while time.time() < deadline:
+                  time.sleep(5)
+                  render_status = call("GET", f"/api/render/status/{render_id}")
+                  print("Render job:", json.dumps(render_status))
+                  if render_status.get("status") == "completed":
+                      break
+                  if render_status.get("status") == "failed":
+                      raise RuntimeError(render_status.get("error_message") or render_status.get("current_step") or "FFmpeg render failed.")
+              else:
+                  raise RuntimeError("FFmpeg render did not finish within six minutes.")
+              result["render_status"] = render_status
+
+              video_url = render_status.get("output_url")
+              if not video_url:
+                  raise RuntimeError(f"Render completed without an output_url: {render_status}")
+              if video_url.startswith("/"):
+                  video_url = base + video_url
+              video_response = requests.get(video_url, timeout=120)
+              print(f"GET rendered MP4 -> HTTP {video_response.status_code} ({video_response.headers.get('content-type')})")
+              video_response.raise_for_status()
+              video_path = out / "bloodline-awakening-test.mp4"
+              video_path.write_bytes(video_response.content)
+              if len(video_response.content) < 1000 or video_response.content[4:8] != b"ftyp":
+                  raise RuntimeError("Downloaded render is not a valid MP4 container.")
+              probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-show_entries", "stream=codec_type,codec_name,width,height", "-of", "json", str(video_path)], capture_output=True, text=True, check=True)
+              probe_json = json.loads(probe.stdout)
+              if not any(stream.get("codec_type") == "video" for stream in probe_json.get("streams", [])):
+                  raise RuntimeError(f"MP4 has no video stream: {probe_json}")
+              decode = subprocess.run(["ffmpeg", "-v", "error", "-i", str(video_path), "-f", "null", "-"], capture_output=True, text=True)
+              if decode.returncode != 0:
+                  raise RuntimeError(f"FFmpeg could not decode the rendered MP4: {decode.stderr[-1500:]}")
+              result["mp4_bytes"] = len(video_response.content)
+              result["ffprobe"] = probe_json
+              result["mp4_playable"] = True
+              result["status"] = "SUCCESS"
+              print("END-TO-END SUCCESS: real AI image returned, attached to scene, and playable MP4 verified.")
+          except Exception as exc:
+              result["status"] = "FAILED"
+              result["error"] = str(exc)
+              print("END-TO-END TEST FAILED:", str(exc))
+              raise
+          finally:
+              (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+          PY
+
+      - name: Upload generated image, MP4, and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bloodline-live-generation-verification
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail workflow if end-to-end verification failed
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1
