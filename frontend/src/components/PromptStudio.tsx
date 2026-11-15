@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { VideoStyle, Project } from '../types/studio';
-import { generateStoryboard, generateFromDocument, fetchGeneratorCapabilities, GeneratorCapabilities } from '../services/api';
+import { generateStoryboard, generateFromDocument, fetchGeneratorCapabilities, GeneratorCapabilities, startAnimeGeneration, getAnimeGenerationStatus, getProject } from '../services/api';
 
 interface PromptStudioProps {
   initialStyle?: VideoStyle;
@@ -70,6 +70,10 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
   const [docFile, setDocFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [engine, setEngine] = useState<GeneratorCapabilities | null>(null);
+  const [storyboardProject, setStoryboardProject] = useState<Project | null>(null);
+  const [animeLoading, setAnimeLoading] = useState(false);
+  const [animeProgress, setAnimeProgress] = useState(0);
+  const [animeMessage, setAnimeMessage] = useState('');
 
   useEffect(() => { fetchGeneratorCapabilities().then(setEngine).catch(() => setEngine(null)); }, []);
 
@@ -99,8 +103,13 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           include_voiceover: includeVoiceover
         });
       }
-      onProjectCreated(project);
-      onClose();
+      if (style === 'ai_generated' && activeTab === 'prompt') {
+        setStoryboardProject(project);
+        setAnimeMessage('Storyboard created. Generate the actual scene media next.');
+      } else {
+        onProjectCreated(project);
+        onClose();
+      }
     } catch (err: any) {
       setError(err.message || 'Generation failed');
     } finally {
@@ -108,6 +117,34 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
     }
   };
 
+  const handleGenerateAnime = async () => {
+    if (!storyboardProject) return;
+    setAnimeLoading(true);
+    setError(null);
+    setAnimeProgress(0);
+    try {
+      const started = await startAnimeGeneration(storyboardProject.id);
+      setAnimeMessage(started.message || 'Anime generation queued.');
+      for (let attempt = 0; attempt < 450; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 2000));
+        const status = await getAnimeGenerationStatus(started.job_id);
+        setAnimeProgress(status.progress || 0);
+        setAnimeMessage(status.message || 'Generating scenes…');
+        if (status.status === 'failed') throw new Error(status.error || status.message || 'Anime generation failed.');
+        if (status.status === 'completed') {
+          const completedProject = await getProject(storyboardProject.id);
+          onProjectCreated(completedProject);
+          onClose();
+          return;
+        }
+      }
+      throw new Error('Anime generation is taking longer than expected. Your storyboard is saved; check the generation server and try again.');
+    } catch (err: any) {
+      setError(err.message || 'Anime generation failed.');
+    } finally {
+      setAnimeLoading(false);
+    }
+  };
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '720px', padding: '28px' }}>
@@ -189,6 +226,32 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           </div>
         </div>
 
+        {storyboardProject && (
+          <div style={{ padding: '14px', marginBottom: '18px', borderRadius: '10px', border: '1px solid var(--primary)', background: 'var(--bg-secondary)' }}>
+            <div style={{ fontWeight: 800, marginBottom: '6px' }}>BLOODLINE STORYBOARD READY</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+              {storyboardProject.scenes.length} scenes prepared. Connect a ComfyUI API workflow to generate actual scene media; video outputs are attached to scenes and can be assembled into an MP4.
+            </div>
+            {animeLoading && (
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px' }}>
+                  <span>{animeMessage}</span><strong>{Math.round(animeProgress)}%</strong>
+                </div>
+                <div style={{ height: '7px', borderRadius: '8px', overflow: 'hidden', background: 'var(--border-subtle)' }}>
+                  <div style={{ width: String(animeProgress) + '%', height: '100%', background: 'var(--primary)', transition: 'width 0.3s ease' }} />
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button className="btn btn-primary" onClick={handleGenerateAnime} disabled={animeLoading}>
+                {animeLoading ? <><Loader2 size={15} className="spin" /> Generating Anime…</> : <><Sparkles size={15} /> Generate Anime Scenes</>}
+              </button>
+              <button className="btn btn-outline" onClick={() => { onProjectCreated(storyboardProject); onClose(); }} disabled={animeLoading}>
+                Open Storyboard Editor
+              </button>
+            </div>
+          </div>
+        )}
         {/* Prompt Input or Document Upload */}
         {activeTab === 'prompt' ? (
           <div style={{ marginBottom: '18px' }}>
@@ -348,7 +411,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           <button 
             className="btn btn-primary"
             onClick={handleGenerate}
-            disabled={loading}
+            disabled={loading || !!storyboardProject}
             style={{ padding: '10px 24px', fontSize: '14px' }}
           >
             {loading ? (
