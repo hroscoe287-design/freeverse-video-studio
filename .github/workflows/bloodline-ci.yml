@@ -18,6 +18,8 @@ jobs:
         run: pip install -r backend/requirements.txt
       - name: Compile backend
         run: python -m compileall -q backend/app
+      - name: Test Roscoe Anime Engine
+        run: PYTHONPATH=backend python -m pytest backend/tests -q
 
   frontend:
     runs-on: ubuntu-latest
