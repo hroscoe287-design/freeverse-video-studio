@@ -63,28 +63,35 @@ async def generate_from_document(
 
 @router.get("/capabilities")
 def generator_capabilities():
-    """Report whether a real external image/video generation runtime is reachable."""
+    """Report actual storyboard, render, and ComfyUI workflow availability."""
     endpoint = os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
     configured = bool(os.environ.get("COMFYUI_BASE_URL"))
+    workflow_path = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
+    workflow_exists = bool(workflow_path and Path(workflow_path).expanduser().is_file())
     reachable = False
-    detail = "No ComfyUI server configured. Storyboards and FFmpeg editing are available; AI anime generation is not."
+    detail = "No ComfyUI server configured. Storyboards and FFmpeg editing are available; AI scene generation is not."
     try:
         req = urllib.request.Request(f"{endpoint}/system_stats", headers={"User-Agent": "FreeVerseStudio"})
         with urllib.request.urlopen(req, timeout=2.5) as response:
             reachable = response.status == 200
-        detail = "ComfyUI is reachable. A compatible anime image/video workflow must also be installed."
     except Exception:
         if configured:
-            detail = "COMFYUI_BASE_URL is set, but the generation server could not be reached."
+            detail = "COMFYUI_BASE_URL is set, but the generation server could not be reached from this backend."
+    ready = reachable and workflow_exists
+    if reachable and not workflow_exists:
+        detail = "ComfyUI is connected. Set COMFYUI_WORKFLOW_JSON to an API-format workflow file to enable scene generation."
+    elif ready:
+        detail = "ComfyUI and a workflow file are configured. Generation will work if the workflow's models and nodes are installed."
     return {
         "storyboard": True,
         "ffmpeg_render": True,
         "comfyui_configured": configured,
         "comfyui_reachable": reachable,
-        "anime_generation_ready": False,
+        "workflow_configured": bool(workflow_path),
+        "workflow_file_exists": workflow_exists,
+        "anime_generation_ready": ready,
         "detail": detail
     }
-
 
 ANIME_JOBS: Dict[str, Dict[str, Any]] = {}
 ANIME_JOBS_LOCK = threading.Lock()
