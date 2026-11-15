@@ -121,20 +121,25 @@ def build_anime_prompt(prompt: str, character_bible: str = "", style: str = "cin
 def adaptive_params(model_name: Optional[str], width: int = 512, height: int = 512) -> Dict[str, Any]:
     """Use modest image sizes and family-aware step counts to reduce worker compute."""
     name = (model_name or "").lower()
-    if any(x in name for x in ("lightning", "turbo", "lcm")):
-        steps, cfg, sampler = 6, 2.0, "k_euler"
-    elif any(x in name for x in ("sdxl", "animagine", "illustrious", "noobai", "pony")):
-        steps, cfg, sampler = 12, 5.5, "k_euler_a"
+    anonymous = not (os.environ.get("AI_HORDE_API_KEY") or "").strip()
+    if anonymous:
+        # Minimal first-order-equivalent workload for the public no-key tier.
+        # Keep frames small; the editor can scale them for the video timeline.
+        steps, cfg, sampler = 4, 2.0, "k_euler"
+        width = height = 256
     else:
-        steps, cfg, sampler = 12, 5.0, "k_euler_a"
-    # Stay below AI Horde's 427px anonymous-request threshold and keep sampler
-    # work conservative so free community workers do not require upfront kudos.
-    width = min(384, max(256, int(width) // 64 * 64))
-    height = min(384, max(256, int(height) // 64 * 64))
+        if any(x in name for x in ("lightning", "turbo", "lcm")):
+            steps, cfg, sampler = 6, 2.0, "k_euler"
+        elif any(x in name for x in ("sdxl", "animagine", "illustrious", "noobai", "pony")):
+            steps, cfg, sampler = 12, 5.5, "k_euler_a"
+        else:
+            steps, cfg, sampler = 12, 5.0, "k_euler_a"
+        width = min(768, max(512, int(width) // 64 * 64))
+        height = min(768, max(512, int(height) // 64 * 64))
     return {
         "n": 1, "width": width, "height": height,
         "steps": steps, "cfg_scale": cfg, "sampler_name": sampler,
-        "karras": True, "seed": str(secrets.randbelow(2**31 - 1)),
+        "karras": not anonymous, "seed": str(secrets.randbelow(2**31 - 1)),
     }
 
 
@@ -161,7 +166,10 @@ def generate_anime_image(
 ) -> Tuple[Path, str]:
     """Generate a real image through a remote volunteer worker and save it as an asset."""
     models = _live_models()
-    model_name = choose_anime_model(models)
+    anonymous = not (os.environ.get("AI_HORDE_API_KEY") or "").strip()
+    # Do not pin anonymous jobs to a high-cost SDXL checkpoint; let Horde route
+    # them to any compatible volunteer worker.
+    model_name = None if anonymous else choose_anime_model(models)
     params = adaptive_params(model_name, width, height)
     full_prompt = build_anime_prompt(prompt)
     negative = negative_prompt.strip() or NEGATIVE_DEFAULT
