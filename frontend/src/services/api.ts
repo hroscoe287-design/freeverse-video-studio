@@ -142,6 +142,8 @@ export interface GeneratorCapabilities {
   comfyui_configured: boolean;
   comfyui_reachable: boolean;
   anime_generation_ready: boolean;
+  workflow_configured?: boolean;
+  workflow_file_exists?: boolean;
   detail: string;
 }
 
