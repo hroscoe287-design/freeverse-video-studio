@@ -72,7 +72,7 @@ function buildOfflineStoryboard(params: { prompt: string; style: VideoStyle; tar
   const duration = Math.max(2, params.target_duration / count);
   const bloodline = /bloodline|diamond|eternity infinity|murder co/i.test(prompt);
   const beats = ['Opening image and atmosphere', 'Introduce the hero', 'A mystery begins to unfold', 'The threat reveals itself', 'A decisive confrontation', 'A powerful final image'];
-  const sentences = prompt.split(/(?<=[.!?])\\s+/).filter(Boolean);
+  const sentences = prompt.split(/(?<=[.!?])\s+/).filter(Boolean);
   const scenes = Array.from({ length: count }, (_, index) => {
     const beat = beats[index % beats.length];
     const detail = sentences[index % Math.max(1, sentences.length)] || prompt;
