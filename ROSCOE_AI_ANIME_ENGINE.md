@@ -27,17 +27,19 @@ No model is trained from scratch in this commit. That would require a large lice
 
 ## ComfyUI workflow contract
 
-Configure these files on the GPU host/backend filesystem:
+Two ComfyUI API-format workflow templates ship in `backend/workflows/` and are selected automatically by default:
 
-- `ROSCOE_IMAGE_WORKFLOW_JSON`: ComfyUI API-format Neta Lumina workflow.
-- `ROSCOE_VIDEO_WORKFLOW_JSON`: ComfyUI API-format Wan 2.2 TI2V-5B image-to-video workflow.
+- `roscoe_neta_lumina_api.json`: Neta Lumina keyframe generation.
+- `roscoe_wan22_i2v_api.json`: Wan 2.2 TI2V-5B image-to-video generation.
+
+You can override them on the backend with `ROSCOE_IMAGE_WORKFLOW_JSON` and `ROSCOE_VIDEO_WORKFLOW_JSON` if your installed ComfyUI build uses different node versions or model filenames.
 - `COMFYUI_BASE_URL`: address reachable by the backend.
 - `COMFYUI_API_KEY`: optional bearer token, only if the host requires it.
 - `COMFYUI_TIMEOUT_SECONDS`: optional generation timeout (default 900).
 
 Both workflows must accept `__PROMPT__`, `__NEGATIVE_PROMPT__`, and optionally `__SEED__`. The video workflow must load the uploaded image using `__IMAGE__`. The image workflow must return an image; the video workflow should return a video/GIF output. Workflows must use the exact model files and custom nodes installed on the ComfyUI host.
 
-The app's `GET /api/generator/engine` endpoint reports selected models, ComfyUI reachability, and whether both workflow files exist. This is a configuration check, not proof that model inference succeeds. A real end-to-end test still requires the GPU host and both working workflows.
+The app's `GET /api/generator/engine` endpoint reports selected models, ComfyUI reachability, and whether both workflow files exist. This is a configuration check, not proof that model inference succeeds. A real end-to-end test still requires the GPU host, model weights, and compatible ComfyUI nodes.
 
 ## Character training plan
 
