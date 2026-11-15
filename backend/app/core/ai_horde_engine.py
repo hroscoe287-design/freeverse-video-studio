@@ -133,7 +133,7 @@ def adaptive_params(model_name: Optional[str], width: int = 512, height: int = 5
     return {
         "n": 1, "width": width, "height": height,
         "steps": steps, "cfg_scale": cfg, "sampler_name": sampler,
-        "karras": True, "seed": secrets.randbelow(2**31 - 1),
+        "karras": True, "seed": str(secrets.randbelow(2**31 - 1)),
     }
 
 
