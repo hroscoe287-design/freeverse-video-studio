@@ -122,14 +122,15 @@ def adaptive_params(model_name: Optional[str], width: int = 512, height: int = 5
     """Use modest image sizes and family-aware step counts to reduce worker compute."""
     name = (model_name or "").lower()
     if any(x in name for x in ("lightning", "turbo", "lcm")):
-        steps, cfg, sampler = 8, 2.0, "k_euler"
+        steps, cfg, sampler = 6, 2.0, "k_euler"
     elif any(x in name for x in ("sdxl", "animagine", "illustrious", "noobai", "pony")):
-        steps, cfg, sampler = 24, 6.5, "k_euler_a"
+        steps, cfg, sampler = 12, 5.5, "k_euler_a"
     else:
-        steps, cfg, sampler = 20, 6.0, "k_euler_a"
-    # Anonymous requests use a conservative 512px square to avoid worker-side limits.
-    width = max(512, min(1024, int(width) // 64 * 64))
-    height = max(512, min(768, int(height) // 64 * 64))
+        steps, cfg, sampler = 12, 5.0, "k_euler_a"
+    # Stay below AI Horde's 427px anonymous-request threshold and keep sampler
+    # work conservative so free community workers do not require upfront kudos.
+    width = min(384, max(256, int(width) // 64 * 64))
+    height = min(384, max(256, int(height) // 64 * 64))
     return {
         "n": 1, "width": width, "height": height,
         "steps": steps, "cfg_scale": cfg, "sampler_name": sampler,
