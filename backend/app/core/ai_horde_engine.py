@@ -13,9 +13,11 @@ import os
 import re
 import secrets
 import time
-import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+import requests
 
 from ..config import UPLOADS_DIR
 from ..models.render_job import AssetMeta
@@ -23,7 +25,7 @@ from .storage import save_asset_meta
 
 API_BASE = os.environ.get("AI_HORDE_BASE_URL", "https://aihorde.net/api").rstrip("/")
 ANONYMOUS_KEY = "0000000000"
-CLIENT_AGENT = "RoscoesAdaptiveAnimeEngine:2.0:github.com/hroscoe287-design/freeverse-video-studio"
+CLIENT_AGENT = "RoscoesAdaptiveAnimeEngine:2.1:github.com/hroscoe287-design/freeverse-video-studio"
 ANIME_HINTS = ("anime", "animagine", "illustrious", "noobai", "pony", "counterfeit", "anything")
 NEGATIVE_DEFAULT = (
     "low quality, worst quality, blurry, jpeg artifacts, bad anatomy, bad hands, "
@@ -32,21 +34,45 @@ NEGATIVE_DEFAULT = (
 )
 
 
-def _request(path: str, payload: Optional[Dict[str, Any]] = None, timeout: int = 45) -> Dict[str, Any]:
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {
+def _headers() -> Dict[str, str]:
+    # An explicitly present but empty Render variable must not suppress anonymous access.
+    api_key = (os.environ.get("AI_HORDE_API_KEY") or "").strip() or ANONYMOUS_KEY
+    return {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Client-Agent": CLIENT_AGENT,
-        "apikey": os.environ.get("AI_HORDE_API_KEY", ANONYMOUS_KEY),
+        "apikey": api_key,
+        # Cloudflare can reject urllib's default Python client fingerprint.
+        "User-Agent": "RoscoesAdaptiveAnimeEngine/2.1 (FreeVerse Video Studio)",
     }
-    req = urllib.request.Request(
-        f"{API_BASE}{path}", data=data, headers=headers,
-        method="POST" if data is not None else "GET"
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        body = response.read().decode("utf-8")
-        return json.loads(body) if body else {}
+
+
+def _request(path: str, payload: Optional[Dict[str, Any]] = None, timeout: int = 45) -> Dict[str, Any]:
+    """Call AI Horde with requests; urllib is blocked by Cloudflare on some routes."""
+    url = f"{API_BASE}{path}"
+    try:
+        response = requests.post(url, json=payload, headers=_headers(), timeout=timeout) if payload is not None else requests.get(url, headers=_headers(), timeout=timeout)
+        response.raise_for_status()
+        if not response.content:
+            return {}
+        result = response.json()
+        if not isinstance(result, dict) and not isinstance(result, list):
+            raise RuntimeError("AI Horde returned an unexpected response format.")
+        return result
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "unknown"
+        detail = ""
+        if exc.response is not None:
+            detail = (exc.response.text or "")[:400]
+        if status == 403:
+            raise RuntimeError(
+                "AI Horde denied the request (HTTP 403). Check the AI_HORDE_API_KEY "
+                "Render variable or retry if Cloudflare is temporarily blocking the host. "
+                f"Provider response: {detail}"
+            ) from exc
+        raise RuntimeError(f"AI Horde HTTP {status}: {detail or str(exc)}") from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Could not reach AI Horde: {exc}") from exc
 
 
 def _live_models() -> List[Dict[str, Any]]:
@@ -69,7 +95,6 @@ def choose_anime_model(models: List[Dict[str, Any]]) -> Optional[str]:
         workers = int(model.get("count") or model.get("workers") or 0)
         performance = float(model.get("performance") or 0)
         queued = int(model.get("queued") or 0)
-        # Prefer anime-specific checkpoints, then available workers and lower queue.
         specificity = 3 if any(x in lower for x in ("animagine", "illustrious", "noobai")) else 1
         ranked.append((specificity * 100 + min(workers, 30) * 3 + min(performance, 100) - min(queued, 100) * 0.2, name))
     return max(ranked)[1] if ranked else None
@@ -78,7 +103,7 @@ def choose_anime_model(models: List[Dict[str, Any]]) -> Optional[str]:
 def build_anime_prompt(prompt: str, character_bible: str = "", style: str = "cinematic 2D Japanese anime") -> str:
     """Normalize prompts into a compact shot brief; preserve user story facts."""
     clean = re.sub(r"\s+", " ", (prompt or "").strip())
-    bible = re.sub(r"\\s+", " ", (character_bible or "").strip())
+    bible = re.sub(r"\s+", " ", (character_bible or "").strip())
     parts = [
         "high quality original 2D Japanese anime keyframe",
         style,
@@ -93,17 +118,16 @@ def build_anime_prompt(prompt: str, character_bible: str = "", style: str = "cin
     return ", ".join(parts)
 
 
-def adaptive_params(model_name: Optional[str], width: int = 768, height: int = 512) -> Dict[str, Any]:
+def adaptive_params(model_name: Optional[str], width: int = 512, height: int = 512) -> Dict[str, Any]:
     """Use modest image sizes and family-aware step counts to reduce worker compute."""
     name = (model_name or "").lower()
-    # SDXL/Illustrious-family checkpoints need more steps than distilled/Lightning models.
     if any(x in name for x in ("lightning", "turbo", "lcm")):
         steps, cfg, sampler = 8, 2.0, "k_euler"
     elif any(x in name for x in ("sdxl", "animagine", "illustrious", "noobai", "pony")):
         steps, cfg, sampler = 24, 6.5, "k_euler_a"
     else:
         steps, cfg, sampler = 20, 6.0, "k_euler_a"
-    # Horde requires dimensions to be multiples of 64; clamp to a light but useful canvas.
+    # Anonymous requests use a conservative 512px square to avoid worker-side limits.
     width = max(512, min(1024, int(width) // 64 * 64))
     height = max(512, min(768, int(height) // 64 * 64))
     return {
@@ -129,7 +153,7 @@ def provider_status() -> Dict[str, Any]:
 def generate_anime_image(
     prompt: str,
     negative_prompt: str = "",
-    width: int = 768,
+    width: int = 512,
     height: int = 512,
     timeout_seconds: int = 900,
     progress: Optional[Callable[[str], None]] = None,
@@ -179,10 +203,16 @@ def generate_anime_image(
     if not generations or not generations[0].get("img"):
         raise RuntimeError("The worker finished but did not return an image.")
     image_url = generations[0]["img"]
-    request = urllib.request.Request(image_url, headers={"User-Agent": CLIENT_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        image_bytes = response.read()
-        content_type = response.headers.get("Content-Type", "image/png").split(";")[0]
+    parsed_url = urlparse(image_url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise RuntimeError("AI Horde returned an invalid image URL.")
+    try:
+        image_response = requests.get(image_url, headers={"User-Agent": _headers()["User-Agent"]}, timeout=120)
+        image_response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Could not download the generated anime image: {exc}") from exc
+    image_bytes = image_response.content
+    content_type = image_response.headers.get("Content-Type", "image/png").split(";")[0]
     if not image_bytes:
         raise RuntimeError("The AI worker returned an empty image.")
 
