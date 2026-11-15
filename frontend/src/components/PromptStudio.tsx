@@ -125,7 +125,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
     try {
       const started = await startAnimeGeneration(storyboardProject.id);
       setAnimeMessage(started.message || 'Anime generation queued.');
-      for (let attempt = 0; attempt < 450; attempt += 1) {
+      for (let attempt = 0; attempt < 1800; attempt += 1) {
         await new Promise(resolve => window.setTimeout(resolve, 2000));
         const status = await getAnimeGenerationStatus(started.job_id);
         setAnimeProgress(status.progress || 0);
