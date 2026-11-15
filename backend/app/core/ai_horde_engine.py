@@ -77,7 +77,7 @@ def choose_anime_model(models: List[Dict[str, Any]]) -> Optional[str]:
 
 def build_anime_prompt(prompt: str, character_bible: str = "", style: str = "cinematic 2D Japanese anime") -> str:
     """Normalize prompts into a compact shot brief; preserve user story facts."""
-    clean = re.sub(r"\\s+", " ", (prompt or "").strip())
+    clean = re.sub(r"\s+", " ", (prompt or "").strip())
     bible = re.sub(r"\\s+", " ", (character_bible or "").strip())
     parts = [
         "high quality original 2D Japanese anime keyframe",
