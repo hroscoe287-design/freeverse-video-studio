@@ -230,7 +230,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           <div style={{ padding: '14px', marginBottom: '18px', borderRadius: '10px', border: '1px solid var(--primary)', background: 'var(--bg-secondary)' }}>
             <div style={{ fontWeight: 800, marginBottom: '6px' }}>BLOODLINE STORYBOARD READY</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              {storyboardProject.scenes.length} scenes prepared. Connect a ComfyUI API workflow to generate actual scene media; video outputs are attached to scenes and can be assembled into an MP4.
+              {storyboardProject.scenes.length} scenes prepared. Configure a reachable ComfyUI server and API-format workflow. Video workflow outputs are attached to scenes and assembled into an MP4; image-only workflows produce animated camera moves, not character animation.
             </div>
             {animeLoading && (
               <div style={{ marginBottom: '10px' }}>
@@ -263,7 +263,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
             </div>
             <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-              <strong>Anime engine:</strong> {engine ? (engine.comfyui_reachable ? 'ComfyUI connected — workflow setup still required' : 'Not connected') : 'Checking connection…'}
+              <strong>Anime engine:</strong> {engine ? (engine.anime_generation_ready ? 'ComfyUI and workflow configured' : (engine.comfyui_reachable ? 'ComfyUI connected — workflow file required' : 'Not connected')) : 'Checking connection…'}
               <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{engine?.detail || 'Checking the backend generation service.'}</div>
             </div>
             <textarea
