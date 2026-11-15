@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from app.core.roscoe_anime_engine import (
     ENGINE_NAME,
     MODEL_PROFILES,
@@ -39,3 +42,18 @@ def test_engine_readiness_requires_both_workflows_and_reachable_host():
     assert engine_status(True, True, True)["ready"] is True
     assert engine_status(True, True, False)["ready"] is False
     assert engine_status(False, True, True)["ready"] is False
+
+
+def test_bundled_api_workflows_have_required_prompt_tokens():
+    root = Path(__file__).resolve().parents[1] / "workflows"
+    image = json.loads((root / "roscoe_neta_lumina_api.json").read_text())
+    video = json.loads((root / "roscoe_wan22_i2v_api.json").read_text())
+    image_text = json.dumps(image)
+    video_text = json.dumps(video)
+    assert "__PROMPT__" in image_text
+    assert "__NEGATIVE_PROMPT__" in image_text
+    assert "__PROMPT__" in video_text
+    assert "__NEGATIVE_PROMPT__" in video_text
+    assert "__IMAGE__" in video_text
+    assert any(node.get("class_type") == "SaveImage" for node in image.values())
+    assert any(node.get("class_type") == "SaveVideo" for node in video.values())
