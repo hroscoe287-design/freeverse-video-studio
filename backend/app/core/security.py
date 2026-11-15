@@ -15,7 +15,7 @@ def sanitize_filename(filename: str) -> str:
         return "unnamed_asset"
     
     # Strip path separators
-    clean_name = Path(filename.replace('\\\\', '/')).name
+    clean_name = Path(filename.replace('\\', '/')).name
     # Remove any null bytes
     clean_name = clean_name.replace('\x00', '')
     # Replace unsafe characters with underscore
