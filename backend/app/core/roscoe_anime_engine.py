@@ -28,6 +28,7 @@ MODEL_PROFILES = {
         "license": "Apache-2.0",
         "workflow_env": "ROSCOE_VIDEO_WORKFLOW_JSON",
         "model_url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B",
+        "minimum_vram_gb": 8,
         "description": "Animates generated keyframes into short video clips."
     }
 }
