@@ -41,7 +41,7 @@ The editor and FFmpeg assembly can be free. Actual generative video is compute-i
 5. Make the workflow JSON file available to the backend container, then set:
    - `COMFYUI_BASE_URL=https://your-comfyui-host`
    - `COMFYUI_WORKFLOW_JSON=/absolute/path/to/workflow_api.json`
-   - optionally `COMFYUI_TIMEOUT_SECONDS=900`
+   - optionally `COMFYUI_API_KEY=your-provider-token` when the ComfyUI host requires bearer authentication\n   - optionally `COMFYUI_TIMEOUT_SECONDS=900`
 6. Restart the backend and check `GET /api/generator/capabilities`. It should report `comfyui_reachable=true` and `anime_generation_ready=true`.
 7. In the app, create the BLOODLINE storyboard, choose **Generate Anime Scenes**, wait for all scenes to finish, then render/export the MP4.
 
