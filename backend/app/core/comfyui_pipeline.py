@@ -36,6 +36,8 @@ def _replace_tokens(value: Any, prompt: str, negative: str, seed: int, image_fil
         return {k: _replace_tokens(v, prompt, negative, seed, image_filename) for k, v in value.items()}
     if isinstance(value, list):
         return [_replace_tokens(v, prompt, negative, seed, image_filename) for v in value]
+    if value == "__SEED__":
+        return seed
     if isinstance(value, str):
         return (value.replace("__PROMPT__", prompt)
                      .replace("__NEGATIVE_PROMPT__", negative)
