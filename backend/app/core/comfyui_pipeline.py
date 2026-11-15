@@ -20,9 +20,12 @@ from .storage import save_asset_meta
 
 def _request_json(url: str, payload: Dict[str, Any] = None, timeout: int = 30) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Content-Type": "application/json", "User-Agent": "FreeVerseStudio"}
+    api_key = os.environ.get("COMFYUI_API_KEY")
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
     req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "FreeVerseStudio"},
+        url, data=data, headers=headers,
         method="POST" if data is not None else "GET"
     )
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -77,10 +80,10 @@ def generate_scene_media(prompt: str, negative_prompt: str = "") -> Tuple[Path, 
     outputs = history.get("outputs", {})
     selected = None
     media_kind = None
-    for node in outputs.values():
-        if not isinstance(node, dict):
-            continue
-        for key in ("videos", "gifs", "images"):
+    for key in ("videos", "gifs", "images"):
+        for node in outputs.values():
+            if not isinstance(node, dict):
+                continue
             items = node.get(key)
             if items:
                 selected, media_kind = items[0], key
@@ -94,7 +97,11 @@ def generate_scene_media(prompt: str, negative_prompt: str = "") -> Tuple[Path, 
     subfolder = str(selected.get("subfolder", ""))
     output_type = str(selected.get("type", "output"))
     query = urllib.parse.urlencode({"filename": filename, "subfolder": subfolder, "type": output_type})
-    request = urllib.request.Request(f"{base}/view?{query}", headers={"User-Agent": "FreeVerseStudio"})
+    view_headers = {"User-Agent": "FreeVerseStudio"}
+    api_key = os.environ.get("COMFYUI_API_KEY")
+    if api_key:
+        view_headers["Authorization"] = "Bearer " + api_key
+    request = urllib.request.Request(f"{base}/view?{query}", headers=view_headers)
     with urllib.request.urlopen(request, timeout=120) as response:
         data = response.read()
         content_type = response.headers.get("Content-Type", "")
