@@ -263,12 +263,12 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
             </div>
             <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-              <strong>ROSCOE AI ANIME ENGINE:</strong> {engine ? (engine.anime_generation_ready ? 'Generation workflows ready' : (engine.comfyui_reachable ? 'GPU server connected — model workflows need setup' : 'GPU server not connected')) : 'Checking connection…'}
+              <strong>ROSCOE AI ANIME ENGINE:</strong> {engine ? (engine.anime_generation_ready ? 'Workflow files found — live model test pending' : (engine.comfyui_reachable ? 'GPU server connected — model workflows need setup' : 'GPU server not connected')) : 'Checking connection…'}
               <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{engine?.detail || 'Checking the backend generation service.'}</div>
               <div style={{ marginTop: '8px', display: 'grid', gap: '5px' }}>
                 <div><strong>Anime artwork:</strong> {engine?.engine?.models?.image?.name || 'Neta Lumina v1.0'} · <a href="https://huggingface.co/neta-art/Neta-Lumina" target="_blank" rel="noreferrer">model</a></div>
                 <div><strong>Character animation:</strong> {engine?.engine?.models?.video?.name || 'Wan 2.2 TI2V-5B'} · <a href="https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B" target="_blank" rel="noreferrer">model</a></div>
-                <div style={{ color: 'var(--text-muted)' }}>Two-stage pipeline: create a consistent anime keyframe, then animate it into a video clip.</div>
+                <div style={{ color: 'var(--text-muted)' }}>Two-stage pipeline: create a consistent anime keyframe, then animate it into a video clip. Model weights and a successful GPU test are still required.</div>
               </div>
             </div>
             <textarea
