@@ -119,7 +119,11 @@ def check_local_model_statuses() -> List[Dict[str, Any]]:
                 m_dict["status_msg"] = "Remote ComfyUI endpoints must use HTTPS; local loopback HTTP is allowed."
             else:
                 try:
-                    req = urllib.request.Request(model.endpoint_url, headers={"User-Agent": "FreeVerseStudio"})
+                    headers = {"User-Agent": "FreeVerseStudio"}
+                    api_key = os.environ.get("COMFYUI_API_KEY") if model.provider_type == "comfyui" else None
+                    if api_key:
+                        headers["Authorization"] = "Bearer " + api_key
+                    req = urllib.request.Request(model.endpoint_url, headers=headers)
                     with urllib.request.urlopen(req, timeout=1.5) as resp:  # nosec B310
                         if resp.status == 200:
                             if model.provider_type == "ollama":
