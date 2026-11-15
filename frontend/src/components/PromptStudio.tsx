@@ -123,9 +123,9 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               <Sparkles size={18} color="#FFFFFF" />
             </div>
             <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Smart Video Storyboard Studio</h2>
+              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>BLOODLINE ANIME STORY STUDIO</h2>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Transform words or documents into a full multi-scene video project
+                Build the script and scene plan before animation
               </p>
             </div>
           </div>
@@ -157,7 +157,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
             {[
-              { id: 'ai_generated', label: 'AI Visual Story', badge: 'Ken Burns' },
+              { id: 'ai_generated', label: 'AI Visual Story', badge: 'Storyboard' },
               { id: 'cartoon', label: "Kids' Cartoon", badge: 'Safe & Bouncy' },
               { id: 'educational', label: 'Educational', badge: 'Explainers' },
               { id: 'social', label: 'Social Shorts (9:16)', badge: 'TikTok / Reels' },
@@ -192,6 +192,10 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
             <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
               Describe Your Desired Video
             </label>
+            <div style={{ padding: '12px', marginBottom: '12px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.5)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
+              <strong>Storyboard mode — not video generation.</strong><br />
+              This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
+            </div>
             <textarea
               className="input-field"
               rows={4}
@@ -342,11 +346,11 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           >
             {loading ? (
               <>
-                <Loader2 size={16} className="spin" /> Generating Storyboard...
+                <Loader2 size={16} className="spin" /> Building Storyboard...
               </>
             ) : (
               <>
-                <Sparkles size={16} /> Create Video Storyboard
+                <Sparkles size={16} /> Create Episode Storyboard
               </>
             )}
           </button>
