@@ -31,3 +31,18 @@ Do not add API keys or credentials to source control. Store any provider credent
 ## Cost and device expectations
 
 The editor and FFmpeg assembly can be free. Actual generative video is compute-intensive: a free, unlimited, hosted GPU service should not be assumed. Running ComfyUI locally generally requires a capable computer/GPU; a phone can control a hosted generation backend but usually cannot run the full model stack itself.
+
+## Connect the real generation engine
+
+1. Run ComfyUI on a machine with a compatible GPU, or use a trusted hosted ComfyUI service. A Render free web service cannot supply the GPU required by current video diffusion models.
+2. In ComfyUI, build or import a workflow and switch it to **API format** (ComfyUI's Save (API Format) option).
+3. The workflow must accept a positive prompt token `__PROMPT__` and a negative prompt token `__NEGATIVE_PROMPT__`. A seed field can use `__SEED__`. Put these exact tokens in the appropriate text/seed inputs before saving the API workflow JSON.
+4. For actual moving character footage, the workflow must be a text-to-video or image-to-video workflow with a video output node (for example, a compatible video-combine node that writes MP4/WebM/GIF). A workflow that ends in SaveImage creates still artwork only.
+5. Make the workflow JSON file available to the backend container, then set:
+   - `COMFYUI_BASE_URL=https://your-comfyui-host`
+   - `COMFYUI_WORKFLOW_JSON=/absolute/path/to/workflow_api.json`
+   - optionally `COMFYUI_TIMEOUT_SECONDS=900`
+6. Restart the backend and check `GET /api/generator/capabilities`. It should report `comfyui_reachable=true` and `anime_generation_ready=true`.
+7. In the app, create the BLOODLINE storyboard, choose **Generate Anime Scenes**, wait for all scenes to finish, then render/export the MP4.
+
+The backend substitutes the prompt tokens, queues the workflow, polls ComfyUI, downloads its first video/GIF/image output for each scene, attaches the media to the project, and lets the existing FFmpeg renderer assemble it. If the workflow returns still images, the final MP4 uses camera motion on those images; it is not character animation. The workflow's model weights, custom nodes, and GPU memory must be installed and compatible on the ComfyUI host.
