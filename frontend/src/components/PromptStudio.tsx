@@ -28,6 +28,7 @@ const SAMPLE_PROMPTS: Record<VideoStyle, string[]> = {
     'A modern architectural tour of minimalist sustainable homes'
   ],
   ai_generated: [
+    'BLOODLINE — Episode 1: THE LEGACY. Diamond discovers the truth about his bloodline as his sister Eternity Infinity is pulled into a dangerous prophecy. Murder Co. emerges from the shadows to hunt them. Create a dramatic anime pilot with powerful character reveals, cinematic battles, emotional family moments, and a cliffhanger ending.',
     'Futuristic cybernetic city where digital light streams through neon alleys',
     'Deep space discovery of an ancient celestial crystalline monolith',
     'Neural networks morphing into glowing synaptic constellations'
