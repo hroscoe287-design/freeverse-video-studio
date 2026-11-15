@@ -3,6 +3,7 @@ import shutil
 import platform
 import urllib.request
 import json
+import os
 from typing import List, Dict, Any
 from pydantic import BaseModel
 
@@ -49,7 +50,7 @@ SUPPORTED_LOCAL_MODELS: List[AIModelInfo] = [
         vram_required_gb=6.0,
         cpu_compatible=False,
         provider_type="comfyui",
-        endpoint_url="http://127.0.0.1:8188/system_stats",
+        endpoint_url=f"{os.environ.get('COMFYUI_BASE_URL', 'http://127.0.0.1:8188').rstrip('/')}/system_stats",
         setup_guide="Run ComfyUI desktop or portable build. FreeVerse connects automatically on port 8188."
     ),
     AIModelInfo(
