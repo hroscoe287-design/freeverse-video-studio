@@ -196,11 +196,24 @@ export const App: React.FC = () => {
     handleUpdateProject({ audio_tracks: newTracks });
   };
 
-  const handleAddAudioTrack = (track: AudioTrack) => {
+  const handleAddAudioTrack = (track: Partial<AudioTrack>) => {
     if (!currentProject) return;
-    const newTracks = [...currentProject.audio_tracks, track];
+    const completeTrack: AudioTrack = {
+      id: track.id || `audio_${Date.now()}`,
+      title: track.title || 'New audio track',
+      type: track.type || 'music',
+      start_time: track.start_time ?? 0,
+      duration: track.duration,
+      volume: track.volume ?? 1,
+      fade_in: track.fade_in ?? 0,
+      fade_out: track.fade_out ?? 0,
+      ducking: track.ducking ?? false,
+      asset_id: track.asset_id,
+      asset_url: track.asset_url
+    };
+    const newTracks = [...currentProject.audio_tracks, completeTrack];
     handleUpdateProject({ audio_tracks: newTracks });
-    showToast(`Added track: ${track.title}`, 'success');
+    showToast(`Added track: ${completeTrack.title}`, 'success');
   };
 
   const handleDeleteAudioTrack = (index: number) => {
