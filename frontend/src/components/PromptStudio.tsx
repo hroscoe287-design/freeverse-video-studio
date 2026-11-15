@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Sparkles, 
   FileText, 
@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { VideoStyle, Project } from '../types/studio';
-import { generateStoryboard, generateFromDocument } from '../services/api';
+import { generateStoryboard, generateFromDocument, fetchGeneratorCapabilities, GeneratorCapabilities, startAnimeGeneration, getAnimeGenerationStatus, getProject } from '../services/api';
 
 interface PromptStudioProps {
   initialStyle?: VideoStyle;
@@ -69,6 +69,13 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
   const [loading, setLoading] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [engine, setEngine] = useState<GeneratorCapabilities | null>(null);
+  const [storyboardProject, setStoryboardProject] = useState<Project | null>(null);
+  const [animeLoading, setAnimeLoading] = useState(false);
+  const [animeProgress, setAnimeProgress] = useState(0);
+  const [animeMessage, setAnimeMessage] = useState('');
+
+  useEffect(() => { fetchGeneratorCapabilities().then(setEngine).catch(() => setEngine(null)); }, []);
 
   const handleGenerate = async () => {
     if (activeTab === 'prompt' && !prompt.trim()) {
@@ -96,8 +103,13 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           include_voiceover: includeVoiceover
         });
       }
-      onProjectCreated(project);
-      onClose();
+      if (style === 'ai_generated' && activeTab === 'prompt') {
+        setStoryboardProject(project);
+        setAnimeMessage('Storyboard created. Generate the actual scene media next.');
+      } else {
+        onProjectCreated(project);
+        onClose();
+      }
     } catch (err: any) {
       setError(err.message || 'Generation failed');
     } finally {
@@ -105,6 +117,34 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
     }
   };
 
+  const handleGenerateAnime = async () => {
+    if (!storyboardProject) return;
+    setAnimeLoading(true);
+    setError(null);
+    setAnimeProgress(0);
+    try {
+      const started = await startAnimeGeneration(storyboardProject.id);
+      setAnimeMessage(started.message || 'Anime generation queued.');
+      for (let attempt = 0; attempt < 1800; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 2000));
+        const status = await getAnimeGenerationStatus(started.job_id);
+        setAnimeProgress(status.progress || 0);
+        setAnimeMessage(status.message || 'Generating scenes…');
+        if (status.status === 'failed') throw new Error(status.error || status.message || 'Anime generation failed.');
+        if (status.status === 'completed') {
+          const completedProject = await getProject(storyboardProject.id);
+          onProjectCreated(completedProject);
+          onClose();
+          return;
+        }
+      }
+      throw new Error('Anime generation is taking longer than expected. Your storyboard is saved; check the generation server and try again.');
+    } catch (err: any) {
+      setError(err.message || 'Anime generation failed.');
+    } finally {
+      setAnimeLoading(false);
+    }
+  };
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '720px', padding: '28px' }}>
@@ -123,9 +163,9 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
               <Sparkles size={18} color="#FFFFFF" />
             </div>
             <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Smart Video Storyboard Studio</h2>
+              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>BLOODLINE ANIME STORY STUDIO</h2>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Transform words or documents into a full multi-scene video project
+                Build the script and scene plan before animation
               </p>
             </div>
           </div>
@@ -157,7 +197,7 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
             {[
-              { id: 'ai_generated', label: 'AI Visual Story', badge: 'Ken Burns' },
+              { id: 'ai_generated', label: 'AI Visual Story', badge: 'Storyboard' },
               { id: 'cartoon', label: "Kids' Cartoon", badge: 'Safe & Bouncy' },
               { id: 'educational', label: 'Educational', badge: 'Explainers' },
               { id: 'social', label: 'Social Shorts (9:16)', badge: 'TikTok / Reels' },
@@ -186,12 +226,46 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           </div>
         </div>
 
+        {storyboardProject && (
+          <div style={{ padding: '14px', marginBottom: '18px', borderRadius: '10px', border: '1px solid var(--primary)', background: 'var(--bg-secondary)' }}>
+            <div style={{ fontWeight: 800, marginBottom: '6px' }}>BLOODLINE STORYBOARD READY</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+              {storyboardProject.scenes.length} scenes prepared. Configure a reachable ComfyUI server and API-format workflow. Video workflow outputs are attached to scenes and assembled into an MP4; image-only workflows produce animated camera moves, not character animation.
+            </div>
+            {animeLoading && (
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px' }}>
+                  <span>{animeMessage}</span><strong>{Math.round(animeProgress)}%</strong>
+                </div>
+                <div style={{ height: '7px', borderRadius: '8px', overflow: 'hidden', background: 'var(--border-subtle)' }}>
+                  <div style={{ width: String(animeProgress) + '%', height: '100%', background: 'var(--primary)', transition: 'width 0.3s ease' }} />
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button className="btn btn-primary" onClick={handleGenerateAnime} disabled={animeLoading}>
+                {animeLoading ? <><Loader2 size={15} className="spin" /> Generating Anime…</> : <><Sparkles size={15} /> Generate Anime Scenes</>}
+              </button>
+              <button className="btn btn-outline" onClick={() => { onProjectCreated(storyboardProject); onClose(); }} disabled={animeLoading}>
+                Open Storyboard Editor
+              </button>
+            </div>
+          </div>
+        )}
         {/* Prompt Input or Document Upload */}
         {activeTab === 'prompt' ? (
           <div style={{ marginBottom: '18px' }}>
             <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
               Describe Your Desired Video
             </label>
+            <div style={{ padding: '12px', marginBottom: '12px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.5)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
+              <strong>Storyboard mode — not video generation.</strong><br />
+              This step creates the episode script and scene plan. Actual anime images and character animation require a connected ComfyUI animation server. The app will no longer pretend a storyboard is a finished video.
+            </div>
+            <div style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
+              <strong>Anime engine:</strong> {engine ? (engine.anime_generation_ready ? 'ComfyUI and workflow configured' : (engine.comfyui_reachable ? 'ComfyUI connected — workflow file required' : 'Not connected')) : 'Checking connection…'}
+              <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{engine?.detail || 'Checking the backend generation service.'}</div>
+            </div>
             <textarea
               className="input-field"
               rows={4}
@@ -337,16 +411,16 @@ export const PromptStudio: React.FC<PromptStudioProps> = ({
           <button 
             className="btn btn-primary"
             onClick={handleGenerate}
-            disabled={loading}
+            disabled={loading || !!storyboardProject}
             style={{ padding: '10px 24px', fontSize: '14px' }}
           >
             {loading ? (
               <>
-                <Loader2 size={16} className="spin" /> Generating Storyboard...
+                <Loader2 size={16} className="spin" /> Building Storyboard...
               </>
             ) : (
               <>
-                <Sparkles size={16} /> Create Video Storyboard
+                <Sparkles size={16} /> Create Episode Storyboard
               </>
             )}
           </button>
