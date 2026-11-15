@@ -1,12 +1,17 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 import os
 import urllib.request
-from typing import Optional
+import threading
+import time
+import uuid
+from typing import Optional, Dict, Any
+from pathlib import Path
 
 from ..models.render_job import PromptGenerateRequest
 from ..models.project import Project
 from ..core.procedural_gen import generate_storyboard_from_prompt
-from ..core.storage import save_project
+from ..core.storage import save_project, load_project, get_asset_meta
+from ..core.comfyui_pipeline import generate_scene_media
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
 
@@ -79,3 +84,87 @@ def generator_capabilities():
         "anime_generation_ready": False,
         "detail": detail
     }
+
+
+ANIME_JOBS: Dict[str, Dict[str, Any]] = {}
+ANIME_JOBS_LOCK = threading.Lock()
+
+def _run_anime_job(job_id: str, project_id: str):
+    with ANIME_JOBS_LOCK:
+        job = ANIME_JOBS[job_id]
+        job["status"] = "running"
+        job["message"] = "Connecting to ComfyUI..."
+    try:
+        project = load_project(project_id)
+        if not project or not project.scenes:
+            raise RuntimeError("Project not found or has no scenes.")
+        total = len(project.scenes)
+        for index, scene in enumerate(project.scenes):
+            with ANIME_JOBS_LOCK:
+                job["progress"] = round(index / total * 100, 1)
+                job["message"] = f"Generating scene {index + 1} of {total}: {scene.title}"
+            scene_text = " ".join(part for part in [
+                project.title, project.description, scene.title,
+                scene.voiceover_text or "", scene.text_overlay or ""
+            ] if part)
+            prompt = (
+                "Create a polished cinematic Japanese dark fantasy anime sequence, "
+                "consistent premium 2D anime art direction, detailed expressive characters, "
+                "coherent anatomy, dramatic film lighting, dynamic composition. "
+                "Series: BLOODLINE. Character continuity: Diamond is a young male warrior "
+                "with black hair and glowing red eyes; Eternity Infinity is his mysterious "
+                "sister; Murder Co. is the ruthless antagonist. Preserve established designs. "
+                f"Scene direction: {scene_text}. "
+                "If the workflow supports video output, animate clear continuous motion, "
+                "not a slideshow or static title card."
+            )
+            negative = (
+                "low quality, blurry, malformed anatomy, extra fingers, inconsistent costume, "
+                "duplicate characters, text, watermark, logo, photorealistic, live action"
+            )
+            media_path, asset_id = generate_scene_media(prompt, negative)
+            scene.asset_id = asset_id
+            scene.motion_effect = "none" if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".gif"} else "ken_burns_zoom_in"
+            with ANIME_JOBS_LOCK:
+                job["progress"] = round((index + 1) / total * 100, 1)
+        save_project(project)
+        with ANIME_JOBS_LOCK:
+            job["status"] = "completed"
+            job["progress"] = 100
+            job["message"] = "Generated media attached to every scene. Ready to render the MP4."
+            job["project_id"] = project_id
+    except Exception as exc:
+        with ANIME_JOBS_LOCK:
+            job["status"] = "failed"
+            job["error"] = str(exc)
+            job["message"] = "Anime generation failed."
+
+@router.post("/anime/start/{project_id}")
+def start_anime_generation(project_id: str):
+    if not os.environ.get("COMFYUI_WORKFLOW_JSON"):
+        raise HTTPException(
+            status_code=503,
+            detail="The anime engine is not configured yet. Connect ComfyUI and set COMFYUI_WORKFLOW_JSON to an API-format text-to-video or image-to-video workflow."
+        )
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not project.scenes:
+        raise HTTPException(status_code=400, detail="The project has no scenes to generate.")
+    job_id = str(uuid.uuid4())
+    with ANIME_JOBS_LOCK:
+        ANIME_JOBS[job_id] = {
+            "job_id": job_id, "project_id": project_id, "status": "queued",
+            "progress": 0, "message": "Queued anime generation", "error": None
+        }
+    thread = threading.Thread(target=_run_anime_job, args=(job_id, project_id), daemon=True)
+    thread.start()
+    return ANIME_JOBS[job_id]
+
+@router.get("/anime/status/{job_id}")
+def anime_generation_status(job_id: str):
+    with ANIME_JOBS_LOCK:
+        job = ANIME_JOBS.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Anime generation job not found.")
+        return dict(job)
