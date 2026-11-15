@@ -12,7 +12,7 @@ from ..models.project import Project
 from ..core.procedural_gen import generate_storyboard_from_prompt
 from ..core.storage import save_project, load_project, get_asset_meta
 from ..core.comfyui_pipeline import generate_scene_media
-from ..core.roscoe_anime_engine import (MODEL_PROFILES, NEGATIVE_PROMPT, build_scene_prompt, build_motion_prompt, engine_status)
+from ..core.roscoe_anime_engine import (MODEL_PROFILES, NEGATIVE_PROMPT, build_scene_prompt, build_motion_prompt, engine_status, workflow_path)
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
 
@@ -77,8 +77,8 @@ def roscoe_anime_engine_status():
             reachable = response.status == 200
     except Exception:
         pass
-    image_path = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON", "")
-    video_path = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON", "")
+    image_path = workflow_path("image")
+    video_path = workflow_path("video")
     return engine_status(
         reachable,
         bool(image_path and Path(image_path).expanduser().is_file()),
@@ -137,8 +137,8 @@ def _run_anime_job(job_id: str, project_id: str):
             ] if part)
             prompt = build_scene_prompt(project.title, project.description, scene.title, scene_text)
             negative = NEGATIVE_PROMPT
-            image_workflow = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON")
-            video_workflow = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON")
+            image_workflow = workflow_path("image")
+            video_workflow = workflow_path("video")
             if image_workflow and video_workflow:
                 keyframe_path, _ = generate_scene_media(
                     prompt, negative, workflow_path=image_workflow, output_preference="image"
@@ -169,8 +169,8 @@ def _run_anime_job(job_id: str, project_id: str):
 
 @router.post("/anime/start/{project_id}")
 def start_anime_generation(project_id: str):
-    image_workflow = os.environ.get("ROSCOE_IMAGE_WORKFLOW_JSON", "")
-    video_workflow = os.environ.get("ROSCOE_VIDEO_WORKFLOW_JSON", "")
+    image_workflow = workflow_path("image")
+    video_workflow = workflow_path("video")
     legacy_workflow = os.environ.get("COMFYUI_WORKFLOW_JSON", "")
     two_stage_ready = (
         image_workflow and Path(image_workflow).expanduser().is_file()
