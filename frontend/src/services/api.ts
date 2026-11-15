@@ -2,10 +2,15 @@ import { Project, AssetMeta, RenderStatus, AIModelInfo, HardwareInfo, VideoStyle
 
 const API_BASE = '/api';
 
+const LOCAL_PROJECTS_KEY = 'roscoes-freeverse-projects-v1';
+const readLocalProjects = (): Project[] => { try { return JSON.parse(localStorage.getItem(LOCAL_PROJECTS_KEY) || '[]') as Project[]; } catch { return []; } };
+const writeLocalProjects = (items: Project[]) => localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(items));
+const makeLocalProject = (p: { title: string; style: VideoStyle; aspect_ratio: AspectRatio; resolution: Resolution; fps: number }): Project => { const now = new Date().toISOString(); return { id: `local_${Date.now()}_${Math.random().toString(36).slice(2,8)}`, title:p.title, description:'Created in Roscoe’s offline studio.', style:p.style, aspect_ratio:p.aspect_ratio, resolution:p.resolution, fps:p.fps, scenes:[], audio_tracks:[], created_at:now, updated_at:now }; };
+const saveLocalProject = (p: Project) => { const all=readLocalProjects(); const i=all.findIndex(x=>x.id===p.id); if(i<0) all.unshift(p); else all[i]=p; writeLocalProjects(all); };
+
+
 export async function fetchProjects(): Promise<Project[]> {
-  const res = await fetch(`${API_BASE}/projects`);
-  if (!res.ok) throw new Error('Failed to load projects');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/projects`); if(!r.ok) throw Error(); return await r.json(); } catch { return readLocalProjects(); }
 }
 
 export async function createProject(payload: {
@@ -15,44 +20,23 @@ export async function createProject(payload: {
   resolution: Resolution;
   fps: number;
 }): Promise<Project> {
-  const res = await fetch(`${API_BASE}/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error('Failed to create project');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw Error(); return await r.json(); } catch { const p=makeLocalProject(payload); saveLocalProject(p); return p; }
 }
 
 export async function getProject(id: string): Promise<Project> {
-  const res = await fetch(`${API_BASE}/projects/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch project');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/projects/${id}`); if(!r.ok) throw Error(); return await r.json(); } catch { const p=readLocalProjects().find(x=>x.id===id); if(!p) throw Error('Project not found'); return p; }
 }
 
 export async function updateProject(id: string, payload: Partial<Project>): Promise<Project> {
-  const res = await fetch(`${API_BASE}/projects/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error('Failed to update project');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/projects/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw Error(); return await r.json(); } catch { const p=readLocalProjects().find(x=>x.id===id); if(!p) throw Error('Project not found'); const u={...p,...payload,updated_at:new Date().toISOString()}; saveLocalProject(u); return u; }
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/${id}`, {
-    method: 'DELETE'
-  });
-  if (!res.ok && res.status !== 404) throw new Error('Failed to delete project');
+  try { const r=await fetch(`${API_BASE}/projects/${id}`,{method:'DELETE'}); if(!r.ok&&r.status!==404) throw Error(); } catch { writeLocalProjects(readLocalProjects().filter(x=>x.id!==id)); }
 }
 
 export async function duplicateProject(id: string): Promise<Project> {
-  const res = await fetch(`${API_BASE}/projects/${id}/duplicate`, {
-    method: 'POST'
-  });
-  if (!res.ok) throw new Error('Failed to duplicate project');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/projects/${id}/duplicate`,{method:'POST'}); if(!r.ok) throw Error(); return await r.json(); } catch { const p=await getProject(id); const c={...p,id:`local_${Date.now()}`,title:`${p.title} (Copy)`,created_at:new Date().toISOString(),updated_at:new Date().toISOString()}; saveLocalProject(c); return c; }
 }
 
 export async function fetchAssets(): Promise<AssetMeta[]> {
@@ -90,16 +74,7 @@ export async function generateStoryboard(params: {
   include_voiceover: boolean;
   source_document?: string;
 }): Promise<Project> {
-  const res = await fetch(`${API_BASE}/generator/storyboard`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Generation failed' }));
-    throw new Error(err.detail || 'Failed to generate storyboard');
-  }
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/generator/storyboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)}); if(!r.ok) throw Error(); return await r.json(); } catch { const lines=params.prompt.split(/(?<=[.!?])\s+|\n+/).map(x=>x.trim()).filter(Boolean); const fallback=['Establish the world and its danger.','The hero discovers a clue about their legacy.','A powerful enemy reveals the threat.','The hero makes a choice that changes everything.','A dramatic confrontation erupts.','End on a suspenseful cliffhanger.']; const p=makeLocalProject({title:params.prompt.slice(0,48)||'New Story',style:params.style,aspect_ratio:params.style==='social'?'9:16':'16:9',resolution:'1080p',fps:30}); p.description=params.prompt; p.scenes=Array.from({length:params.scene_count},(_,i)=>({id:`scene_${i+1}`,title:`Scene ${i+1}`,duration:params.target_duration/params.scene_count,text_overlay:lines[i]||fallback[i%6],voiceover_text:params.include_voiceover?(lines[i]||fallback[i%6]):'',text_position:'bottom' as const,text_color:'#FFFFFF',font_size:32,transition:'fade' as const,transition_duration:0.5,motion_effect:'ken_burns_zoom_in' as const,background_color:'#151525',order:i})); saveLocalProject(p); return p; }
 }
 
 export async function generateFromDocument(file: File, style: VideoStyle, duration: number): Promise<Project> {
@@ -108,12 +83,7 @@ export async function generateFromDocument(file: File, style: VideoStyle, durati
   formData.append('style', style);
   formData.append('target_duration', duration.toString());
   
-  const res = await fetch(`${API_BASE}/generator/document-storyboard`, {
-    method: 'POST',
-    body: formData
-  });
-  if (!res.ok) throw new Error('Failed to process document');
-  return res.json();
+  try { const r=await fetch(`${API_BASE}/generator/document-storyboard`,{method:'POST',body:formData}); if(!r.ok) throw Error(); return await r.json(); } catch { const content=await file.text(); return generateStoryboard({prompt:content,style,target_duration:duration,scene_count:Math.max(2,Math.min(6,Math.ceil(duration/8))),include_voiceover:true}); }
 }
 
 export async function startRender(projectId: string, quality: 'draft' | 'standard' | 'high' = 'standard'): Promise<RenderStatus> {
