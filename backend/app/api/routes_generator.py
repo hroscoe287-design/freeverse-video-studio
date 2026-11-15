@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+import os
+import urllib.request
 from typing import Optional
 
 from ..models.render_job import PromptGenerateRequest
@@ -52,3 +54,28 @@ async def generate_from_document(
     project = generate_storyboard_from_prompt(req)
     saved = save_project(project)
     return saved
+
+
+@router.get("/capabilities")
+def generator_capabilities():
+    """Report whether a real external image/video generation runtime is reachable."""
+    endpoint = os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
+    configured = bool(os.environ.get("COMFYUI_BASE_URL"))
+    reachable = False
+    detail = "No ComfyUI server configured. Storyboards and FFmpeg editing are available; AI anime generation is not."
+    try:
+        req = urllib.request.Request(f"{endpoint}/system_stats", headers={"User-Agent": "FreeVerseStudio"})
+        with urllib.request.urlopen(req, timeout=2.5) as response:
+            reachable = response.status == 200
+        detail = "ComfyUI is reachable. A compatible anime image/video workflow must also be installed."
+    except Exception:
+        if configured:
+            detail = "COMFYUI_BASE_URL is set, but the generation server could not be reached."
+    return {
+        "storyboard": True,
+        "ffmpeg_render": True,
+        "comfyui_configured": configured,
+        "comfyui_reachable": reachable,
+        "anime_generation_ready": False,
+        "detail": detail
+    }
