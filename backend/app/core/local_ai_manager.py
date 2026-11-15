@@ -3,7 +3,7 @@ import shutil
 import platform
 import urllib.request
 import json
-import os
+from urllib.parse import urlparse
 from typing import List, Dict, Any
 from pydantic import BaseModel
 
@@ -111,9 +111,12 @@ def check_local_model_statuses() -> List[Dict[str, Any]]:
             m_dict["installed"] = True
             m_dict["status_msg"] = "Active and fully operational (100% offline)"
         elif model.provider_type in ["ollama", "comfyui"]:
-            if not (model.endpoint_url.startswith("http://127.0.0.1:") or model.endpoint_url.startswith("http://localhost:")):
+            parsed = urlparse(model.endpoint_url)
+            is_local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            is_secure_remote = parsed.scheme == "https"
+            if not (is_local or is_secure_remote):
                 m_dict["installed"] = False
-                m_dict["status_msg"] = "Invalid endpoint URL scheme"
+                m_dict["status_msg"] = "Remote ComfyUI endpoints must use HTTPS; local loopback HTTP is allowed."
             else:
                 try:
                     req = urllib.request.Request(model.endpoint_url, headers={"User-Agent": "FreeVerseStudio"})
@@ -126,7 +129,7 @@ def check_local_model_statuses() -> List[Dict[str, Any]]:
                                 m_dict["status_msg"] = f"Connected! Models: {', '.join(models_available[:3]) or 'None pulled'}"
                             else:
                                 m_dict["installed"] = True
-                                m_dict["status_msg"] = "ComfyUI server active on 127.0.0.1:8188"
+                                m_dict["status_msg"] = "ComfyUI server reachable at configured endpoint"
                         else:
                             m_dict["installed"] = False
                             m_dict["status_msg"] = f"Service responded with status {resp.status}"
