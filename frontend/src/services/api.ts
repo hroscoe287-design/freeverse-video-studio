@@ -135,3 +135,18 @@ export async function fetchHardwareInfo(): Promise<HardwareInfo> {
   if (!res.ok) throw new Error('Failed to fetch hardware specs');
   return res.json();
 }
+
+export interface GeneratorCapabilities {
+  storyboard: boolean;
+  ffmpeg_render: boolean;
+  comfyui_configured: boolean;
+  comfyui_reachable: boolean;
+  anime_generation_ready: boolean;
+  detail: string;
+}
+
+export async function fetchGeneratorCapabilities(): Promise<GeneratorCapabilities> {
+  const r = await fetch(`${API_BASE}/generator/capabilities`);
+  if (!r.ok) throw new Error('Could not check the anime generation engine.');
+  return r.json();
+}
