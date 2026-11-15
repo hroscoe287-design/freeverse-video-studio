@@ -3,6 +3,8 @@
 The engine is an orchestration layer over downloadable open-weight models.
 It does not claim that model weights are bundled in this source repository.
 """
+import os
+from pathlib import Path
 from typing import Any, Dict
 
 ENGINE_NAME = "ROSCOE AI ANIME ENGINE"
@@ -29,6 +31,19 @@ MODEL_PROFILES = {
         "description": "Animates generated keyframes into short video clips."
     }
 }
+
+
+DEFAULT_WORKFLOWS = {
+    "image": Path(__file__).resolve().parents[2] / "workflows" / "roscoe_neta_lumina_api.json",
+    "video": Path(__file__).resolve().parents[2] / "workflows" / "roscoe_wan22_i2v_api.json",
+}
+
+def workflow_path(kind: str) -> str:
+    """Use an explicit deployment override or the workflow shipped with FreeVerse."""
+    if kind not in MODEL_PROFILES:
+        raise ValueError(f"Unknown model stage: {kind}")
+    env_name = MODEL_PROFILES[kind]["workflow_env"]
+    return os.environ.get(env_name, str(DEFAULT_WORKFLOWS[kind]))
 
 BLOODLINE_BIBLE = {
     "Diamond": "young male warrior, black hair, glowing red eyes",
