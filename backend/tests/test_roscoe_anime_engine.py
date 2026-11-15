@@ -68,3 +68,36 @@ def test_workflow_seed_token_stays_numeric():
     assert result["1"]["inputs"]["seed"] == 12345
     assert isinstance(result["1"]["inputs"]["seed"], int)
     assert result["1"]["inputs"]["text"] == "anime hero"
+
+
+
+def test_adaptive_engine_selects_anime_model_with_live_workers():
+    from app.core.ai_horde_engine import choose_anime_model
+    models = [
+        {"name": "General SDXL", "count": 20, "performance": 90, "queued": 0},
+        {"name": "Animagine XL 4.0", "count": 4, "performance": 35, "queued": 2},
+        {"name": "NoobAI-XL", "count": 1, "performance": 10, "queued": 20},
+    ]
+    assert choose_anime_model(models) == "Animagine XL 4.0"
+
+
+def test_adaptive_engine_uses_fewer_steps_for_distilled_models():
+    from app.core.ai_horde_engine import adaptive_params
+    lightning = adaptive_params("Anime Lightning XL")
+    standard = adaptive_params("Animagine XL")
+    assert lightning["steps"] == 8
+    assert standard["steps"] == 24
+    assert lightning["width"] % 64 == 0
+    assert standard["height"] % 64 == 0
+
+
+def test_adaptive_prompt_preserves_character_bible_and_scene():
+    from app.core.ai_horde_engine import build_anime_prompt
+    prompt = build_anime_prompt(
+        "Diamond runs through a ruined temple.",
+        "Diamond: black hair, glowing red eyes, dark coat."
+    )
+    assert "CHARACTER CONTINUITY" in prompt
+    assert "black hair, glowing red eyes" in prompt
+    assert "Diamond runs through a ruined temple" in prompt
+    assert "single coherent frame" in prompt
